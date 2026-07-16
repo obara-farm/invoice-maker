@@ -425,7 +425,8 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import { getDatabase, ref, get, set, onValue } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCer9Gz8nMbP3hBod3O_66oVQGEKsUfXVo",
@@ -437,17 +438,28 @@ const firebaseConfig = {
   appId: "1:663663293010:web:eaef68dee692fe1322258b"
 };
 const fbApp = initializeApp(firebaseConfig);
-const db = getFirestore(fbApp);
-// invoice_ prefix keeps this app's data fully separate from breeding-manager2 / vet-inventory collections
-const storeDocRef = doc(db, 'invoice_app', 'main');
+const auth = getAuth(fbApp);
+const rtdb = getDatabase(fbApp);
+// same shared UID path breeding-manager2 / vet-inventory use, under a new "invoice" top-level node
+const SHARED_UID = 'FhVF92oHJXMwK01gakK1Mms4HGP2';
+const dataRef = ref(rtdb, `invoice/${SHARED_UID}/app`);
 let suppressNextSnapshot = false;
-let firestoreReady = false;
+let syncReady = false;
 
 function setSyncStatus(text, cls){
   const el = document.getElementById('syncStatus');
   if(!el) return;
   el.textContent = text;
   el.className = 'sync-status ' + (cls||'');
+}
+
+function waitForAuth(){
+  return new Promise((resolve, reject) => {
+    onAuthStateChanged(auth, (user) => {
+      if(user) resolve(user);
+    });
+    signInAnonymously(auth).catch(reject);
+  });
 }
 
 const STORE_KEY = 'invoice-maker-data-v2';
@@ -479,11 +491,12 @@ function lastDayOfNextMonth(dateStr){
 async function loadStore(){
   setSyncStatus('🔄 読み込み中…', 'syncing');
   try{
-    const snap = await getDoc(storeDocRef);
-    if(snap.exists() && snap.data().json){
-      store = JSON.parse(snap.data().json);
+    await waitForAuth();
+    const snap = await get(dataRef);
+    if(snap.exists() && snap.val() && snap.val().json){
+      store = JSON.parse(snap.val().json);
     }
-    firestoreReady = true;
+    syncReady = true;
     setSyncStatus('✅ 同期済み', 'ok');
   }catch(e){
     console.error('読み込みに失敗しました', e);
@@ -493,7 +506,7 @@ async function loadStore(){
 async function persistStore(){
   try{
     suppressNextSnapshot = true;
-    await setDoc(storeDocRef, { json: JSON.stringify(store), updatedAt: Date.now() });
+    await set(dataRef, { json: JSON.stringify(store), updatedAt: Date.now() });
     setSyncStatus('✅ 同期済み', 'ok');
   }catch(e){
     console.error('保存に失敗しました', e);
@@ -502,11 +515,13 @@ async function persistStore(){
 }
 
 function startRealtimeSync(){
-  onSnapshot(storeDocRef, (snap) => {
+  onValue(dataRef, (snap) => {
     if(suppressNextSnapshot){ suppressNextSnapshot = false; return; }
-    if(!snap.exists() || !firestoreReady) return;
+    if(!syncReady || !snap.exists()) return;
+    const val = snap.val();
+    if(!val || !val.json) return;
     try{
-      store = JSON.parse(snap.data().json);
+      store = JSON.parse(val.json);
       renderQuickadd();
       renderClientQuick();
       renderHistory();
@@ -519,6 +534,7 @@ function startRealtimeSync(){
     setSyncStatus('⚠️ オフライン（この端末のみ）', 'error');
   });
 }
+
 
 function genInvoiceNo(){
   store.seq = (store.seq||0) + 1;
