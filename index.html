@@ -241,7 +241,21 @@
     h1.brand,.brand-sub{display:none;}
     .sheet{border:none;padding:0;}
     input,textarea,select{color:var(--ink) !important;}
+    body.printing-pricelist .sheet,
+    body.printing-pricelist .toolbar,
+    body.printing-pricelist .history,
+    body.printing-pricelist .edit-banner{display:none !important;}
+    body.printing-pricelist .pricelist-panel{display:block !important;}
+    .no-print{display:none !important;}
   }
+  .pricelist-panel{background:#fff;border:1px solid var(--line);border-radius:8px;padding:24px 26px;margin-bottom:20px;}
+  .pricelist-panel h2{font-family:'Noto Serif JP',serif;font-size:17px;margin:0 0 14px;}
+  table.pricelist{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px;}
+  table.pricelist th,table.pricelist td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top;}
+  table.pricelist th{background:var(--box);font-weight:700;}
+  table.pricelist td.num{text-align:right;white-space:nowrap;}
+  .pricelist-note{font-size:11.5px;color:var(--ink-soft);line-height:1.8;margin-top:10px;}
+  .pricelist-note p{margin:4px 0;}
   @media (max-width:640px){
     .sheet{padding:22px 16px;}
     .head-cols{flex-direction:column;}
@@ -261,6 +275,7 @@
     <button id="btnPrint">印刷 / PDF出力</button>
     <button class="ghost" id="btnToggleHist">履歴を表示</button>
     <button class="ghost" id="btnToggleStats">集計を見る</button>
+    <button class="ghost" id="btnTogglePricelist">卵代料金表</button>
     <button class="ghost" id="btnExportBackup">バックアップを書き出す</button>
     <button class="ghost" id="btnImportBackup">バックアップを読み込む</button>
     <input type="file" id="importFileInput" accept="application/json" style="display:none;">
@@ -433,6 +448,30 @@
 
     <h3 class="stats-subhead">取引先別売上（税込）</h3>
     <table class="stats-table" id="clientStatsTable"></table>
+  </div>
+
+  <div class="pricelist-panel" id="pricelistPanel" style="display:none;">
+    <h2>受精卵 卵代料金表</h2>
+    <table class="pricelist">
+      <thead>
+        <tr><th>区分</th><th class="num">料金</th><th>備考</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>凍結胚　Aランク</td><td class="num">¥20,000</td><td>受胎した場合</td></tr>
+        <tr><td>　うちステージBL（胚盤胞）〜ExB（拡張胚盤胞）</td><td class="num">¥15,000</td><td>60日妊鑑保障。受胎しなかった場合の卵代</td></tr>
+        <tr><td>凍結培養胚（基本Aランクのみ）</td><td class="num">¥20,000</td><td>試験卵のため成功報酬制。受胎しなければ卵代¥5,000（技術料なし）</td></tr>
+        <tr><td>新鮮胚　Aランク（培養新鮮胚含む）</td><td class="num">¥20,000</td><td></td></tr>
+        <tr><td>新鮮胚　Bランク</td><td class="num">¥15,000</td><td></td></tr>
+        <tr><td>ダメもと移植（成功報酬）</td><td class="num">該当ランクの卵代</td><td>受胎すれば該当ランクの卵代、受胎しなければ卵代なし</td></tr>
+      </tbody>
+    </table>
+    <div class="pricelist-note">
+      <p>※BL（胚盤胞）〜ExB（拡張胚盤胞）は、より若いステージ（桑実胚・初期胚盤胞など）と比べて凍結・融解後の耐性が下がる傾向があるため、受胎しなかった場合の卵代を軽減しております。</p>
+      <p>※ドナー牛の枝肉成績が3頭未満の場合、能力の保証ができないため、卵代から¥3,000値引きいたします。</p>
+    </div>
+    <div class="no-print" style="margin-top:16px;">
+      <button class="ghost" id="btnPrintPricelist">この料金表を印刷 / PDF出力</button>
+    </div>
   </div>
 </div>
 
@@ -1242,6 +1281,19 @@ document.getElementById('btnToggleStats').addEventListener('click', (e)=>{
   panel.style.display = showing ? 'none' : 'block';
   e.target.textContent = showing ? '集計を見る' : '集計を隠す';
   if(!showing) renderStats();
+});
+
+document.getElementById('btnTogglePricelist').addEventListener('click', (e)=>{
+  const panel = document.getElementById('pricelistPanel');
+  const showing = panel.style.display !== 'none';
+  panel.style.display = showing ? 'none' : 'block';
+  e.target.textContent = showing ? '卵代料金表' : '料金表を隠す';
+});
+
+document.getElementById('btnPrintPricelist').addEventListener('click', ()=>{
+  document.body.classList.add('printing-pricelist');
+  window.print();
+  document.body.classList.remove('printing-pricelist');
 });
 document.getElementById('statsPeriod').addEventListener('change', renderStats);
 
