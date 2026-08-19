@@ -119,8 +119,9 @@
   table.items tbody td.num input{text-align:right;}
   table.items tbody td.ctr input, table.items tbody td.ctr select{text-align:center;}
   table.items tbody td.amt{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
-  table.items tbody td.rm{width:22px;text-align:center;}
-  table.items tbody td.rm button{border:none;background:none;color:var(--ink-soft);font-size:13px;padding:0;}
+  table.items tbody td.rm{width:60px;text-align:center;white-space:nowrap;}
+  table.items tbody td.rm button{border:none;background:none;color:var(--ink-soft);font-size:11px;padding:0 2px;}
+  table.items tbody td.rm button:disabled{opacity:0.25;cursor:default;}
   table.items tbody td.rm button:hover{color:#a83a2c;}
   table.items tbody tr.blank td{border-bottom:1px solid var(--line);height:26px;}
 
@@ -334,7 +335,7 @@
 
     <table class="items">
       <colgroup>
-        <col style="width:11%"><col style="width:33%"><col style="width:13%"><col style="width:9%"><col style="width:8%"><col style="width:11%"><col style="width:15%"><col style="width:3%">
+        <col style="width:11%"><col style="width:30%"><col style="width:13%"><col style="width:9%"><col style="width:8%"><col style="width:11%"><col style="width:15%"><col style="width:6%">
       </colgroup>
       <thead>
         <tr>
@@ -582,7 +583,11 @@ function renderItems(){
         </select>
       </td>
       <td class="amt">¥${yen(it.qty*it.price)}</td>
-      <td class="rm"><button data-idx="${idx}" class="rmBtn">✕</button></td>
+      <td class="rm">
+        <button data-idx="${idx}" class="upBtn" ${idx===0?'disabled':''} title="上に移動" style="cursor:pointer;">▲</button>
+        <button data-idx="${idx}" class="downBtn" ${idx===items.length-1?'disabled':''} title="下に移動" style="cursor:pointer;">▼</button>
+        <button data-idx="${idx}" class="rmBtn">✕</button>
+      </td>
     `;
     body.appendChild(tr);
   });
@@ -612,6 +617,24 @@ function renderItems(){
     btn.addEventListener('click', e => {
       const idx = +e.target.dataset.idx;
       items.splice(idx,1);
+      renderItems();
+      recalc();
+    });
+  });
+  body.querySelectorAll('.upBtn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const idx = +e.target.dataset.idx;
+      if(idx <= 0) return;
+      [items[idx-1], items[idx]] = [items[idx], items[idx-1]];
+      renderItems();
+      recalc();
+    });
+  });
+  body.querySelectorAll('.downBtn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const idx = +e.target.dataset.idx;
+      if(idx >= items.length-1) return;
+      [items[idx], items[idx+1]] = [items[idx+1], items[idx]];
       renderItems();
       recalc();
     });
