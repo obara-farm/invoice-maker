@@ -248,14 +248,16 @@
     body.printing-pricelist .pricelist-panel{display:block !important;}
     .no-print{display:none !important;}
   }
-  .pricelist-panel{background:#fff;border:1px solid var(--line);border-radius:8px;padding:24px 26px;margin-bottom:20px;}
-  .pricelist-panel h2{font-family:'Noto Serif JP',serif;font-size:17px;margin:0 0 14px;}
-  table.pricelist{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px;}
-  table.pricelist th,table.pricelist td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top;}
-  table.pricelist th{background:var(--box);font-weight:700;}
-  table.pricelist td.num{text-align:right;white-space:nowrap;}
-  .pricelist-note{font-size:11.5px;color:var(--ink-soft);line-height:1.8;margin-top:10px;}
-  .pricelist-note p{margin:4px 0;}
+  .pricelist-panel{background:#fff;border:1px solid var(--line);border-radius:8px;padding:28px 34px;margin-bottom:20px;}
+  .pricelist-panel h2{font-family:'Noto Serif JP',serif;font-size:20px;margin:0 0 20px;}
+  table.pricelist{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:8px;}
+  table.pricelist th{background:var(--accent);color:#fff;font-weight:700;padding:10px 14px;text-align:left;font-size:12.5px;letter-spacing:.03em;}
+  table.pricelist td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  table.pricelist tbody tr:nth-child(even){background:#FBFAF7;}
+  table.pricelist td.num{text-align:right;white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums;}
+  table.pricelist td.remark{font-size:12px;color:var(--ink-soft);}
+  .pricelist-note{font-size:12px;color:var(--ink-soft);line-height:2;margin-top:16px;padding-top:16px;border-top:1px solid var(--line);}
+  .pricelist-note p{margin:6px 0;}
   @media (max-width:640px){
     .sheet{padding:22px 16px;}
     .head-cols{flex-direction:column;}
@@ -452,22 +454,49 @@
 
   <div class="pricelist-panel" id="pricelistPanel" style="display:none;">
     <h2>受精卵 卵代料金表</h2>
+    <p style="font-size:12px;color:var(--ink-soft);margin:-10px 0 16px;">※本表は通常取引の料金です。受精卵補助事業対象の場合は、ステージに関わらず凍結胚一律¥20,000（半額助成適用）となります。</p>
     <table class="pricelist">
       <thead>
-        <tr><th>区分</th><th class="num">料金</th><th>備考</th></tr>
+        <tr>
+          <th style="width:38%;">区分</th>
+          <th class="num" style="width:19%;">受胎した場合</th>
+          <th class="num" style="width:19%;">受胎しなかった場合</th>
+          <th style="width:24%;">備考</th>
+        </tr>
       </thead>
       <tbody>
-        <tr><td>凍結胚　Aランク</td><td class="num">¥20,000</td><td>受胎した場合</td></tr>
-        <tr><td>　うちステージBL（胚盤胞）〜ExB（拡張胚盤胞）</td><td class="num">¥15,000</td><td>60日妊鑑保障。受胎しなかった場合の卵代</td></tr>
-        <tr><td>凍結培養胚（基本Aランクのみ）</td><td class="num">¥20,000</td><td>試験卵のため成功報酬制。受胎しなければ卵代¥5,000（技術料なし）</td></tr>
-        <tr><td>新鮮胚　Aランク（培養新鮮胚含む）</td><td class="num">¥20,000</td><td></td></tr>
-        <tr><td>新鮮胚　Bランク</td><td class="num">¥15,000</td><td></td></tr>
-        <tr><td>ダメもと移植（成功報酬）</td><td class="num">該当ランクの卵代</td><td>受胎すれば該当ランクの卵代、受胎しなければ卵代なし</td></tr>
+        <tr><td>凍結胚　Aランク</td><td class="num">¥20,000</td><td class="num">¥20,000</td><td class="remark"></td></tr>
+        <tr><td>凍結胚　Aランク（ステージBL〜ExB）</td><td class="num">¥20,000</td><td class="num">¥15,000</td><td class="remark">60日妊鑑保障<sup>※1</sup></td></tr>
+        <tr><td>新鮮胚　Aランク（培養新鮮胚含む）</td><td class="num">¥20,000</td><td class="num">¥20,000</td><td class="remark"></td></tr>
+        <tr><td>新鮮胚　Bランク</td><td class="num">¥20,000</td><td class="num">¥15,000</td><td class="remark">60日妊鑑保障</td></tr>
+        <tr><td>凍結培養胚（試験卵・基本Aランクのみ）</td><td class="num">¥20,000</td><td class="num">¥5,000</td><td class="remark">成功報酬制。受胎しなかった場合は技術料なし<sup>※2</sup></td></tr>
+        <tr><td>ダメもと移植</td><td class="num">該当ランクの卵代</td><td class="num">¥0</td><td class="remark">成功報酬制。受胎しなかった場合は卵代・技術料ともになし</td></tr>
       </tbody>
     </table>
-    <div class="pricelist-note">
-      <p>※BL（胚盤胞）〜ExB（拡張胚盤胞）は、より若いステージ（桑実胚・初期胚盤胞など）と比べて凍結・融解後の耐性が下がる傾向があるため、受胎しなかった場合の卵代を軽減しております。</p>
-      <p>※ドナー牛の枝肉成績が3頭未満の場合、能力の保証ができないため、卵代から¥3,000値引きいたします。</p>
+
+    <table class="pricelist" style="margin-top:10px;margin-bottom:14px;">
+      <thead>
+        <tr>
+          <th style="width:38%;">ドナー牛の産仔成績が3頭未満の場合<sup>※3</sup></th>
+          <th class="num" style="width:19%;">受胎した場合</th>
+          <th class="num" style="width:19%;">受胎しなかった場合</th>
+          <th style="width:24%;">備考</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>凍結胚　Aランク</td><td class="num">¥15,000</td><td class="num">¥15,000</td><td class="remark"></td></tr>
+        <tr><td>凍結胚　Aランク（ステージBL〜ExB）</td><td class="num">¥15,000</td><td class="num">¥10,000</td><td class="remark">60日妊鑑保障<sup>※1</sup></td></tr>
+        <tr><td>新鮮胚　Aランク（培養新鮮胚含む）</td><td class="num">¥15,000</td><td class="num">¥15,000</td><td class="remark"></td></tr>
+        <tr><td>新鮮胚　Bランク</td><td class="num">¥15,000</td><td class="num">¥10,000</td><td class="remark">60日妊鑑保障</td></tr>
+        <tr><td>凍結培養胚（試験卵・基本Aランクのみ）</td><td class="num">¥15,000</td><td class="num">¥5,000</td><td class="remark">成功報酬制。受胎しなかった場合は技術料なし<sup>※2</sup></td></tr>
+        <tr><td>ダメもと移植</td><td class="num">該当ランクの卵代</td><td class="num">¥0</td><td class="remark">成功報酬制。受胎しなかった場合は卵代・技術料ともになし</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:12px;color:var(--ink-soft);margin:-6px 0 14px;">※3　能力の保証ができないため、通常料金から一律¥5,000値引き</p>
+
+    <div class="pricelist-note" style="margin-top:0;padding-top:14px;">
+      <p>※1　BL（胚盤胞）〜ExB（拡張胚盤胞）は、より若いステージ（桑実胚・初期胚盤胞など）と比べて凍結・融解後の耐性が下がる傾向があるため、現時点では受胎しなかった場合の卵代を軽減しております。今後、CM胚（後期桑実胚）〜EB（初期胚盤胞）との間で受胎率に有意な差が見られないと判断された場合は、料金を一律に見直す可能性があります。</p>
+      <p>※2　凍結培養胚（試験卵）は、現時点で受胎性・胚の生存性に関するデータが少なく試験段階のため、上記の料金としております。データが蓄積され結果が出次第、料金を改定する場合があります。</p>
     </div>
     <div class="no-print" style="margin-top:16px;">
       <button class="ghost" id="btnPrintPricelist">この料金表を印刷 / PDF出力</button>
@@ -896,6 +925,22 @@ function renderQuickadd(){
       <span class="egg-row-label">ランク</span>
       <div class="egg-btns" id="eggRankBtns"></div>
     </div>
+    <div class="egg-row" id="eggStageRow" style="display:none;">
+      <span class="egg-row-label">ステージ</span>
+      <div class="egg-btns" id="eggStageBtns"></div>
+    </div>
+    <div class="egg-row" id="eggOutcomeRow" style="display:none;">
+      <span class="egg-row-label">結果</span>
+      <div class="egg-btns" id="eggOutcomeBtns"></div>
+    </div>
+    <div class="egg-row">
+      <label style="font-size:11.5px;color:var(--ink-soft);display:flex;align-items:center;gap:5px;cursor:pointer;">
+        <input type="checkbox" id="eggDamaMoto" style="margin:0;">ダメもと移植として
+      </label>
+      <label style="font-size:11.5px;color:var(--ink-soft);display:flex;align-items:center;gap:5px;cursor:pointer;">
+        <input type="checkbox" id="eggUnder3" style="margin:0;">ドナー牛の枝肉成績3頭未満
+      </label>
+    </div>
     <div class="egg-preview">品目名 → <strong id="eggPreviewName">受精卵（黒毛和種）</strong><span class="egg-price-hint" id="eggPriceHint"></span></div>
     <div class="egg-actions">
       <input type="number" id="eggPrice" placeholder="単価（任意）">
@@ -1146,24 +1191,66 @@ document.getElementById('btnAddClient').addEventListener('click', async () => {
 });
 
 const DEFAULT_BREEDS = ['黒毛和種','褐毛和種'];
-const EGG_TYPES = ['指定なし','新鮮胚','凍結胚','培養胚'];
+const EGG_TYPES = ['指定なし','新鮮胚','凍結胚','培養胚（試験卵）'];
 const EGG_RANKS = ['指定なし','Aランク','Bランク'];
-let eggState = { breed: null, type: '指定なし', rank: '指定なし' };
+const EGG_STAGES = ['通常','BL〜ExB'];
+const EGG_OUTCOMES = ['受胎○','受胎×'];
+let eggState = { breed: null, type: '指定なし', rank: '指定なし', stage: '通常', outcome: '受胎○', damaMoto: false, under3: false };
+
+// 卵代料金表（小原家畜診療所・通常取引）に基づく自動計算
+function computeEggPrice(state){
+  const { type, rank, stage, outcome, damaMoto, under3 } = state;
+  let base = null;
+
+  if(damaMoto){
+    // ダメもと移植：受胎すれば該当ランクの卵代、受胎しなければ¥0
+    if(outcome === '受胎○'){
+      base = computeEggPrice({ ...state, damaMoto:false });
+    }else{
+      base = 0;
+    }
+  }else if(type === '凍結胚' && rank === 'Aランク'){
+    if(stage === 'BL〜ExB'){
+      base = outcome === '受胎○' ? 20000 : 15000;
+    }else{
+      base = 20000;
+    }
+  }else if(type === '新鮮胚' && rank === 'Aランク'){
+    base = 20000;
+  }else if(type === '新鮮胚' && rank === 'Bランク'){
+    base = outcome === '受胎○' ? 20000 : 15000;
+  }else if(type === '培養胚（試験卵）'){
+    base = outcome === '受胎○' ? 20000 : 5000;
+  }else{
+    return null; // 品目・ランク未確定は自動計算不可
+  }
+
+  if(base !== null && under3 && !damaMoto){
+    base = Math.max(0, base - 5000);
+  }
+  return base;
+}
 
 function eggComposeName(){
   const breed = eggState.breed || (store.breeds && store.breeds[0]) || DEFAULT_BREEDS[0];
   let name = `受精卵（${breed}）`;
   if(eggState.type && eggState.type !== '指定なし'){
     name += eggState.type;
+    if(eggState.type === '凍結胚' && eggState.rank === 'Aランク' && eggState.stage === 'BL〜ExB'){
+      name += '（BL〜ExB）';
+    }
     if(eggState.rank && eggState.rank !== '指定なし'){
       name += '-' + eggState.rank;
     }
   }
+  if(eggState.damaMoto) name += '（ダメもと移植）';
+  name += `　${eggState.outcome}`;
+  if(eggState.under3) name += '（枝肉成績3頭未満）';
   return name;
 }
 
 function eggPriceKey(){
-  return `${eggState.breed}|${eggState.type}|${eggState.rank}`;
+  return `${eggState.breed}|${eggState.type}|${eggState.rank}|${eggState.stage}|${eggState.outcome}|${eggState.damaMoto}|${eggState.under3}`;
 }
 
 function renderEggBuilder(){
@@ -1206,24 +1293,71 @@ function renderEggBuilder(){
     if(r === eggState.rank) btn.classList.add('active');
     const disabled = eggState.type === '指定なし';
     if(disabled) btn.disabled = true;
-    btn.addEventListener('click', () => { eggState.rank = r; onEggSelectionChange(); });
+    btn.addEventListener('click', () => {
+      eggState.rank = r;
+      if(!(eggState.type === '凍結胚' && r === 'Aランク')) eggState.stage = '通常';
+      onEggSelectionChange();
+    });
     rankBox.appendChild(btn);
   });
 
+  // ステージ（凍結胚・Aランクの時だけ表示）
+  const stageRow = document.getElementById('eggStageRow');
+  const showStage = eggState.type === '凍結胚' && eggState.rank === 'Aランク';
+  stageRow.style.display = showStage ? 'flex' : 'none';
+  if(showStage){
+    const stageBox = document.getElementById('eggStageBtns');
+    stageBox.innerHTML = '';
+    EGG_STAGES.forEach(s => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = s;
+      if(s === eggState.stage) btn.classList.add('active');
+      btn.addEventListener('click', () => { eggState.stage = s; onEggSelectionChange(); });
+      stageBox.appendChild(btn);
+    });
+  }
+
+  // 結果（品目が決まっている時だけ表示）
+  const outcomeRow = document.getElementById('eggOutcomeRow');
+  const showOutcome = eggState.type !== '指定なし';
+  outcomeRow.style.display = showOutcome ? 'flex' : 'none';
+  if(showOutcome){
+    const outcomeBox = document.getElementById('eggOutcomeBtns');
+    outcomeBox.innerHTML = '';
+    EGG_OUTCOMES.forEach(o => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = o;
+      if(o === eggState.outcome) btn.classList.add('active');
+      btn.addEventListener('click', () => { eggState.outcome = o; onEggSelectionChange(); });
+      outcomeBox.appendChild(btn);
+    });
+  }
+
+  document.getElementById('eggDamaMoto').checked = eggState.damaMoto;
+  document.getElementById('eggUnder3').checked = eggState.under3;
+
   document.getElementById('eggPreviewName').textContent = eggComposeName();
-  applyEggRememberedPrice();
+  applyEggComputedPrice();
 }
 
-function applyEggRememberedPrice(){
+function applyEggComputedPrice(){
   const priceInput = document.getElementById('eggPrice');
   const hint = document.getElementById('eggPriceHint');
-  const remembered = (store.eggPrices||{})[eggPriceKey()];
-  if(remembered !== undefined){
-    priceInput.value = remembered;
-    hint.textContent = '（前回の単価を自動入力）';
+  const computed = computeEggPrice(eggState);
+  if(computed !== null){
+    priceInput.value = computed;
+    hint.textContent = '（料金表より自動計算。必要に応じて手入力で上書き可）';
   }else{
-    priceInput.value = '';
-    hint.textContent = '';
+    const remembered = (store.eggPrices||{})[eggPriceKey()];
+    if(remembered !== undefined){
+      priceInput.value = remembered;
+      hint.textContent = '（前回の単価を自動入力）';
+    }else{
+      priceInput.value = '';
+      hint.textContent = '';
+    }
   }
 }
 
@@ -1243,6 +1377,15 @@ function bindEggBuilderEvents(){
     renderEggBuilder();
   });
 
+  document.getElementById('eggDamaMoto').addEventListener('change', (e) => {
+    eggState.damaMoto = e.target.checked;
+    onEggSelectionChange();
+  });
+  document.getElementById('eggUnder3').addEventListener('change', (e) => {
+    eggState.under3 = e.target.checked;
+    onEggSelectionChange();
+  });
+
   document.getElementById('btnEggAdd').addEventListener('click', async () => {
     const name = eggComposeName();
     const unit = document.getElementById('eggUnit').value.trim() || '頭';
@@ -1250,11 +1393,13 @@ function bindEggBuilderEvents(){
     items.push(blankItemRow(name, unit, 1, price));
     renderItems();
     recalc();
-    // remember this price for next time the same combination is used
-    store.eggPrices = store.eggPrices || {};
-    store.eggPrices[eggPriceKey()] = price;
-    await persistStore();
-    applyEggRememberedPrice();
+    // 自動計算できなかった組み合わせの場合のみ、次回用に単価を記憶する
+    if(computeEggPrice(eggState) === null){
+      store.eggPrices = store.eggPrices || {};
+      store.eggPrices[eggPriceKey()] = price;
+      await persistStore();
+    }
+    applyEggComputedPrice();
   });
 }
 
