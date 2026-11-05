@@ -419,7 +419,7 @@
       <tbody id="itemsBody"></tbody>
     </table>
 
-    <div class="no-print" style="margin:10px 0 6px;"><button type="button" id="btnTbImport" class="tb-import-btn">📥 外部授精簿から受精卵代・移植料を取り込む</button></div>
+    <div class="no-print" style="margin:10px 0 6px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" id="btnTbImport" class="tb-import-btn" style="flex:2;min-width:220px;">📥 外部授精簿から受精卵代・移植料を取り込む</button><button type="button" id="btnTbFill" class="tb-import-btn" style="flex:1;min-width:160px;border-style:solid;">🔢 今の明細に胚番号を補う</button></div>
     <div class="qa-search"><input type="text" id="qaSearch" placeholder="🔍 品目を検索（例：CIDR、受精卵）" autocomplete="off"></div>
     <div class="qa-accordion" id="quickaddContainer"></div>
     <div class="quickadd">
@@ -1753,6 +1753,53 @@ function tbApply(){
   document.getElementById('tbDialog').classList.remove('open');
 }
 document.getElementById('btnTbImport').addEventListener('click', openTbImport);
+// 前に作った明細（胚番号なし）に、外部授精簿から胚番号を足す。
+// 同じ牧場・同じドナー×種雄牛・納品日の前後10日以内の移植記録を探し、受胎○は妊鑑＋、受胎×は妊鑑−の記録を優先してあてる
+const fromWareki = w => { const m = String(w||'').match(/R\s*(\d+)[\/.](\d+)[\/.](\d+)/); return m ? `${2018 + +m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}` : ''; };
+const dayDiff = (a, b) => Math.abs((new Date(a) - new Date(b)) / 86400000);
+function rowDonorSire(name){
+  const lines = String(name||'').split('\n');
+  let donor = '', sire = '';
+  const lab = lines.find(l => /^ドナー：/.test(l));
+  if(lab){ donor = (lab.match(/ドナー：([^\s　]+)/)||[])[1] || ''; sire = (lab.match(/種雄牛：([^\s　]+)/)||[])[1] || ''; }
+  else { const m = lines[0].replace(/受胎[○〇×✕]/g, ' ').replace(/[=＝]/g, ' ').match(/([^\s\u3000（）=＝]+)[\s\u3000]*[×xX✕][\s\u3000]*([^\s\u3000（）]+)/); if(m){ donor = m[1].replace(/^.*?[ABＡＢ]ランク/, ''); sire = m[2]; } }
+  return { donor, sire: sire.replace(/受胎.*$/, '') };
+}
+async function fillEmbryoNos(){
+  const btn = document.getElementById('btnTbFill');
+  btn.disabled = true; btn.textContent = '読み込み中…';
+  try{ await tbLoad(); }catch(e){}
+  btn.disabled = false; btn.textContent = '🔢 今の明細に胚番号を補う';
+  const farm = (document.getElementById('clientName')?.value || '').replace(/様|御中/g, '').trim();
+  const pool = tbImp.book.filter(t => t.embryoNo && t.transferDate && (!farm || !t.farmName || t.farmName.includes(farm) || farm.includes(t.farmName)));
+  const used = new Set();
+  let done = 0, miss = 0;
+  items.forEach(it => {
+    const name = String(it.name||'');
+    if(!/^受精卵（/.test(name) || /胚番号：/.test(name)) return;
+    const { donor, sire } = rowDonorSire(name);
+    const date = fromWareki(it.date);
+    if(!donor){ miss++; return; }
+    const ok = /受胎[○〇]/.test(name), ng = /受胎[×✕]/.test(name);
+    const m2 = name.match(/(\d)卵移植/); const need = m2 ? +m2[1] : 1;
+    const cand = pool.filter(t => !used.has(t.id) && t.donor === donor && (!sire || t.sire === sire) && (!date || dayDiff(t.transferDate, date) <= 10))
+      .sort((a, b) => {
+        const pa = (ok && a.pregResult === '+') || (ng && a.pregResult === '-') ? 0 : 1;
+        const pb = (ok && b.pregResult === '+') || (ng && b.pregResult === '-') ? 0 : 1;
+        return pa - pb || (date ? dayDiff(a.transferDate, date) - dayDiff(b.transferDate, date) : 0);
+      });
+    if(!cand.length){ miss++; return; }
+    // 2卵以上：同じ日に同じ牛へ入れた胚をまとめて取る
+    const first = cand[0];
+    const pick = need > 1 ? cand.filter(t => t.transferDate === first.transferDate && (t.recipientNationalId || t.recipientName) === (first.recipientNationalId || first.recipientName)).slice(0, need) : [first];
+    pick.forEach(t => used.add(t.id));
+    it.name = name + '\n胚番号：' + pick.map(t => t.embryoNo).join('、');
+    done++;
+  });
+  renderItems(); recalc();
+  alert(done || miss ? `胚番号を ${done} 行に入れました。${miss ? `\n見つからなかった行：${miss} 行（ドナー名か日付が外部授精簿と合わない可能性があります）` : ''}\n合っているか確認してから保存してください。` : '胚番号が入っていない受精卵の行はありませんでした。');
+}
+document.getElementById('btnTbFill').addEventListener('click', fillEmbryoNos);
 document.getElementById('tbCancel').addEventListener('click', () => document.getElementById('tbDialog').classList.remove('open'));
 document.getElementById('tbOk').addEventListener('click', tbApply);
 
