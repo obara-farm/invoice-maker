@@ -120,6 +120,9 @@
   .name-print .nm-main{font-weight:500;color:var(--ink);}
   .name-print .nm-sub{display:block;font-size:11px;color:var(--ink-soft);padding-left:1em;line-height:1.55;}
   .name-print .nm-empty{color:#b9b4aa;}
+  .name-print .nm-tag{display:inline-block;font-size:10.5px;line-height:1.4;padding:0 6px;margin-left:6px;border:1px solid var(--line);border-radius:3px;color:var(--ink-soft);vertical-align:1px;white-space:nowrap;}
+  .name-print .nm-tag.ok{border-color:#2f7d5b;color:#2f7d5b;font-weight:700;}
+  .name-print .nm-tag.ng{border-color:#b0413e;color:#b0413e;font-weight:700;}
   td.name-cell textarea{display:none;}
   td.name-cell.editing textarea{display:block;}
   td.name-cell.editing .name-print{display:none;}
@@ -691,8 +694,22 @@ function escapeHtml(s){
 function itemNameHTML(name){
   const lines = String(name || '').split('\n');
   if(!lines.join('').trim()) return '<span class="nm-empty">品目名・備考</span>';
-  return '<span class="nm-main">' + escapeHtml(lines[0]) + '</span>' +
-    lines.slice(1).map(l => '<span class="nm-sub">' + escapeHtml(l.replace(/^[\u3000 ]+/, m => m)) + '</span>').join('');
+  let main = lines[0];
+  const subs = lines.slice(1);
+  const tags = [];
+  if(/^受精卵/.test(main)){
+    // 前の書き方「…受胎○=にわか × 光晴重」は、ドナー・種雄牛の行に分けて見せる（保存されている文字はそのまま）
+    const m = main.match(/^(.*?)[=＝]\s*(.+?)\s*[×xX✕]\s*(.+)$/);
+    if(m){ main = m[1]; subs.unshift(`ドナー：${m[2].trim()}　種雄牛：${m[3].trim()}`); }
+    // 受胎○／受胎×・ダメもと・3頭未満は小さな札にする
+    main = main.replace(/[\s\u3000]*(受胎[○〇×✕])[\s\u3000]*/g, (_, t) => { tags.push([t, /[○〇]/.test(t) ? 'ok' : 'ng']); return ' '; });
+    main = main.replace(/（ダメもと移植）/g, () => { tags.push(['ダメもと', '']); return ''; });
+    main = main.replace(/（枝肉成績3頭未満）/g, () => { tags.push(['成績3頭未満', '']); return ''; });
+    main = main.replace(/-([ABＡＢ]ランク)/g, ' $1').replace(/）(?=[^\s（])/, '）').trim();
+  }
+  return '<span class="nm-main">' + escapeHtml(main) + '</span>' +
+    tags.map(([t, c]) => `<span class="nm-tag ${c}">${escapeHtml(t)}</span>`).join('') +
+    subs.map(l => '<span class="nm-sub">' + escapeHtml(l) + '</span>').join('');
 }
 function fitItemTextarea(t){
   t.style.height = 'auto';
