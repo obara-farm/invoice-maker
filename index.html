@@ -419,7 +419,7 @@
       <tbody id="itemsBody"></tbody>
     </table>
 
-    <div class="no-print" style="margin:10px 0 6px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" id="btnTbImport" class="tb-import-btn" style="flex:2;min-width:220px;">📥 外部授精簿から受精卵代・移植料を取り込む</button><button type="button" id="btnTbFill" class="tb-import-btn" style="flex:1;min-width:160px;border-style:solid;">🔢 今の明細に胚番号を補う</button></div>
+    <div class="no-print" style="margin:10px 0 6px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" id="btnTbImport" class="tb-import-btn" style="flex:2;min-width:220px;">📥 外部授精簿から受精卵代・移植料を取り込む</button><button type="button" id="btnTbFill" class="tb-import-btn" style="flex:1;min-width:160px;border-style:solid;">🔢 今の明細に胚番号・移植牛を補う</button></div>
     <div class="qa-search"><input type="text" id="qaSearch" placeholder="🔍 品目を検索（例：CIDR、受精卵）" autocomplete="off"></div>
     <div class="qa-accordion" id="quickaddContainer"></div>
     <div class="quickadd">
@@ -732,7 +732,7 @@ function itemNameHTML(name){
     if(m){
       const donor = m[1].replace(/^.*?[ABＡＢ]ランク/, '');
       main = main.replace(m[0], m[0].startsWith(m[1]) && donor !== m[1] ? m[1].slice(0, m[1].length - donor.length) : ' ');
-      if(!subs.some(l => /^ドナー：/.test(l))) subs.unshift(`ドナー：${donor}　種雄牛：${m[2]}`);
+      if(!subs.some(l => /^ドナー：/.test(l) || (/×/.test(l) && !/^(胚番号|移植牛)：/.test(l)))) subs.unshift(`${donor}×${m[2]}`);
     }
     main = main.replace(/-([ABＡＢ]ランク)/g, ' $1').replace(/[\s\u3000]+/g, ' ').trim();
   }
@@ -748,7 +748,8 @@ function itemNameHTML(name){
   // ランク（Aランク・Bランク）は太字にして見分けやすく
   const mainHTML = escapeHtml(main).replace(/([ABＡＢ]ランク)/g, '<b class="nm-rank">$1</b>');
   return '<span class="nm-main">' + mainHTML + '</span>' + tagLine +
-    subs.map(l => '<span class="nm-sub">' + escapeHtml(l) + '</span>').join('');
+    subs.map(l => l.replace(/^ドナー：([^\s\u3000]*)[\s\u3000]*種雄牛：([^\s\u3000]*)$/, '$1×$2').replace(/^ドナー：([^\s\u3000]+)$/, '$1'))
+      .map(l => '<span class="nm-sub">' + escapeHtml(l) + '</span>').join('');
 }
 function fitItemTextarea(t){
   t.style.height = 'auto';
@@ -1429,9 +1430,7 @@ function eggComposeName(){
   const v = id => ((document.getElementById(id) || {}).value || '').trim();
   const donor = v('eggDonor'), sire = v('eggSire'), no = v('eggNo');
   const line2 = [];
-  if(donor) line2.push(`ドナー：${donor}`);
-  if(sire) line2.push(`種雄牛：${sire}`);
-  if(line2.length) name += '\n' + line2.join('　');
+  if(donor || sire) name += `\n${donor || '—'}×${sire || '—'}`;
   if(no) name += `\n胚番号：${no}`;
   return name;
 }
@@ -1704,9 +1703,10 @@ function tbRowName(r){
   else if(n > 1) name += `（${n}卵移植）`;
   name += `　${r.outcome}`;
   if(r.under3) name += '（枝肉成績3頭未満）';
-  const l2 = []; if(r.donor) l2.push(`ドナー：${r.donor}`); if(r.sire) l2.push(`種雄牛：${r.sire}`);
-  if(l2.length) name += '\n' + l2.join('　');
+  if(r.donor || r.sire) name += `\n${r.donor || '—'}×${r.sire || '—'}`;
   if(n) name += '\n胚番号：' + r.nos.join('、');
+  const rid = r.recs[0].recipientNationalId;
+  if(rid) name += '\n移植牛：' + rid;
   return name;
 }
 function tbRender(){
@@ -1761,7 +1761,9 @@ function rowDonorSire(name){
   const lines = String(name||'').split('\n');
   let donor = '', sire = '';
   const lab = lines.find(l => /^ドナー：/.test(l));
+  const xl = lines.slice(1).find(l => /×/.test(l) && !/^(胚番号|移植牛)：/.test(l));
   if(lab){ donor = (lab.match(/ドナー：([^\s　]+)/)||[])[1] || ''; sire = (lab.match(/種雄牛：([^\s　]+)/)||[])[1] || ''; }
+  else if(xl){ [donor, sire] = xl.split('×').map(x => x.trim().replace(/^—$/, '')); }
   else { const m = lines[0].replace(/受胎[○〇×✕]/g, ' ').replace(/[=＝]/g, ' ').match(/([^\s\u3000（）=＝]+)[\s\u3000]*[×xX✕][\s\u3000]*([^\s\u3000（）]+)/); if(m){ donor = m[1].replace(/^.*?[ABＡＢ]ランク/, ''); sire = m[2]; } }
   return { donor, sire: sire.replace(/受胎.*$/, '') };
 }
@@ -1769,19 +1771,25 @@ async function fillEmbryoNos(){
   const btn = document.getElementById('btnTbFill');
   btn.disabled = true; btn.textContent = '読み込み中…';
   try{ await tbLoad(); }catch(e){}
-  btn.disabled = false; btn.textContent = '🔢 今の明細に胚番号を補う';
+  btn.disabled = false; btn.textContent = '🔢 今の明細に胚番号・移植牛を補う';
   const farm = (document.getElementById('clientName')?.value || '').replace(/様|御中/g, '').trim();
   const pool = tbImp.book.filter(t => t.embryoNo && t.transferDate && (!farm || !t.farmName || t.farmName.includes(farm) || farm.includes(t.farmName)));
-  const used = new Set();
+  const used = new Set(), placed = new Set();
   let done = 0, miss = 0;
   items.forEach(it => {
     const name = String(it.name||'');
-    if(!/^受精卵（/.test(name) || /胚番号：/.test(name)) return;
+    if(!/^受精卵（/.test(name) || (/胚番号：/.test(name) && /移植牛：/.test(name))) return;
     const { donor, sire } = rowDonorSire(name);
     const date = fromWareki(it.date);
     if(!donor){ miss++; return; }
     const ok = /受胎[○〇]/.test(name), ng = /受胎[×✕]/.test(name);
     const m2 = name.match(/(\d)卵移植/); const need = m2 ? +m2[1] : 1;
+    const hasNo = (name.match(/胚番号：([^\n]+)/)||[])[1];
+    if(hasNo){
+      const t0 = pool.find(t => !used.has(t.id) && hasNo.split(/[、,]/).map(x => x.trim()).includes(t.embryoNo));
+      if(t0 && t0.recipientNationalId){ used.add(t0.id); it.name = name + '\n移植牛：' + t0.recipientNationalId; placed.add(t0.recipientNationalId); done++; } else miss++;
+      return;
+    }
     const cand = pool.filter(t => !used.has(t.id) && t.donor === donor && (!sire || t.sire === sire) && (!date || dayDiff(t.transferDate, date) <= 10))
       .sort((a, b) => {
         const pa = (ok && a.pregResult === '+') || (ng && a.pregResult === '-') ? 0 : 1;
@@ -1793,11 +1801,23 @@ async function fillEmbryoNos(){
     const first = cand[0];
     const pick = need > 1 ? cand.filter(t => t.transferDate === first.transferDate && (t.recipientNationalId || t.recipientName) === (first.recipientNationalId || first.recipientName)).slice(0, need) : [first];
     pick.forEach(t => used.add(t.id));
-    it.name = name + '\n胚番号：' + pick.map(t => t.embryoNo).join('、');
+    let nm = name;
+    if(!/胚番号：/.test(nm)) nm += '\n胚番号：' + pick.map(t => t.embryoNo).join('、');
+    const rid = pick[0].recipientNationalId;
+    if(rid && !/移植牛：/.test(nm)){ nm += '\n移植牛：' + rid; placed.add(rid); }
+    it.name = nm;
     done++;
   });
+  // 受精卵の行に移した移植牛の番号は、移植料の行からは外す（数量はそのまま）
+  items.forEach(it => {
+    const name = String(it.name||'');
+    if(!/移植料/.test(name.split('\n')[0])) return;
+    const lines = name.split('\n');
+    const ids = lines.slice(1).map(l => (l.match(/[0-9]{10}/)||[])[0]).filter(Boolean);
+    if(ids.length && ids.every(id => placed.has(id))) it.name = lines[0];
+  });
   renderItems(); recalc();
-  alert(done || miss ? `胚番号を ${done} 行に入れました。${miss ? `\n見つからなかった行：${miss} 行（ドナー名か日付が外部授精簿と合わない可能性があります）` : ''}\n合っているか確認してから保存してください。` : '胚番号が入っていない受精卵の行はありませんでした。');
+  alert(done || miss ? `胚番号・移植牛を ${done} 行に入れました。${miss ? `\n見つからなかった行：${miss} 行（ドナー名か日付が外部授精簿と合わない可能性があります）` : ''}\n合っているか確認してから保存してください。` : '胚番号が入っていない受精卵の行はありませんでした。');
 }
 document.getElementById('btnTbFill').addEventListener('click', fillEmbryoNos);
 document.getElementById('tbCancel').addEventListener('click', () => document.getElementById('tbDialog').classList.remove('open'));
