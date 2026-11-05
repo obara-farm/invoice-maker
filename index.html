@@ -135,6 +135,27 @@
   .id-dialog .msg{font-size:11.5px;color:var(--ink-soft);margin:6px 0;min-height:16px;}
   .id-dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:8px;}
   .id-dialog .acts button{padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:#fff;font-size:13px;}
+  .tb-import-btn{width:100%;padding:10px;border-radius:8px;border:1.5px dashed var(--accent);background:#fff;color:var(--accent);font-weight:700;font-size:13px;cursor:pointer;}
+  .tb-dialog .box{max-width:620px;max-height:92vh;display:flex;flex-direction:column;}
+  .tb-filter{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px;font-size:12px;}
+  .tb-filter label{display:flex;gap:6px;align-items:center;}
+  .tb-filter select,.tb-filter input{border:1px solid var(--line);border-radius:6px;padding:6px;font-size:13px;}
+  .tb-note{font-size:11.5px;color:var(--ink-soft);margin:4px 0 8px;line-height:1.6;}
+  .tb-rows{overflow:auto;flex:1;border-top:1px solid var(--line);}
+  .tb-row{border-bottom:1px solid var(--line);padding:8px 2px;}
+  .tb-head{display:flex;gap:10px;align-items:baseline;font-size:13px;}
+  .tb-head .tb-price{margin-left:auto;font-weight:700;}
+  .tb-sub{font-size:11.5px;color:var(--ink-soft);margin:2px 0 5px;}
+  .tb-ctl{display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:12px;}
+  .tb-ctl label{display:flex;gap:4px;align-items:center;}
+  .tb-seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;}
+  .tb-seg button{border:none;background:#fff;padding:5px 12px;font-size:12.5px;cursor:pointer;}
+  .tb-seg button+button{border-left:1px solid var(--line);}
+  .tb-seg button.on.ok{background:#2f7d5b;color:#fff;font-weight:700;}
+  .tb-seg button.on.ng{background:#b0413e;color:#fff;font-weight:700;}
+  .tb-cnt{color:var(--ink-soft);font-size:11px;}
+  .tb-warn{color:#b0413e;font-weight:700;}
+  .tb-dialog .acts button:disabled{opacity:.4;cursor:default;}
   .id-dialog .acts button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;}
   table.items tbody td.num input{text-align:right;}
   table.items tbody td.ctr input, table.items tbody td.ctr select{text-align:center;}
@@ -398,6 +419,7 @@
       <tbody id="itemsBody"></tbody>
     </table>
 
+    <div class="no-print" style="margin:10px 0 6px;"><button type="button" id="btnTbImport" class="tb-import-btn">📥 外部授精簿から受精卵代・移植料を取り込む</button></div>
     <div class="qa-search"><input type="text" id="qaSearch" placeholder="🔍 品目を検索（例：CIDR、受精卵）" autocomplete="off"></div>
     <div class="qa-accordion" id="quickaddContainer"></div>
     <div class="quickadd">
@@ -1134,7 +1156,6 @@ function renderQuickadd(){
         items.push(blankItemRow(p.name, p.unit, 1, p.price||0, p.taxCat || '10'));
         renderItems();
         recalc();
-        if(/移植/.test(p.name) && !/受精卵（/.test(p.name)) askRecipientIds(items.length - 1);
       });
       body.appendChild(btn);
     });
@@ -1585,6 +1606,156 @@ document.getElementById('btnDuplicateInvoice').addEventListener('click', () => {
 });
 document.getElementById('btnPrint').addEventListener('click', ()=>window.print());
 document.getElementById('btnAddRow').addEventListener('click', ()=>{ items.push(blankItemRow()); renderItems(); });
+// ===== 📥 外部授精簿（繁殖管理）から受精卵代・移植料を取り込む =====
+let tbImp = { book: [], cols: [], fat: [], rows: [] };
+const toWareki = d => { const m = String(d||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `R${+m[1]-2018}/${+m[2]}/${+m[3]}` : ''; };
+const parseMaybe = v => { if(v == null) return []; if(typeof v === 'string'){ try{ v = JSON.parse(v); }catch(e){ return []; } } return Array.isArray(v) ? v : Object.values(v||{}); };
+async function tbLoad(){
+  const base = `data/${SHARED_UID}/`;
+  const [b, c1, c2, f] = await Promise.all(['transferBook','collectionRecordsNew','collectionRecords','fatteningRecords']
+    .map(k => get(ref(rtdb, base + k)).then(s => s.exists() ? s.val() : null).catch(() => null)));
+  tbImp.book = parseMaybe(b); tbImp.cols = [...parseMaybe(c1), ...parseMaybe(c2)]; tbImp.fat = parseMaybe(f);
+}
+// 胚番号から採卵記録の胚を探して、状態・ランク・ステージを決める
+function tbEmbryoInfo(t){
+  const col = tbImp.cols.find(c => c && c.id === t.colRecId);
+  const no = String(t.embryoNo || '').trim();
+  let type = '', rank = '', stage = '';
+  if(col && no){
+    const cu = (col.cultureEmbryos||[]).find(e => e.embryoNo === no);
+    const fr = (col.frozenEmbryos||[]).find(e => e.no === no);
+    const fs = (col.freshEmbryos||[]).find(e => e.embryoNo === no);
+    if(cu){ type = cu.cultureResult === 'freeze' ? '培養胚（試験卵）' : '新鮮胚'; rank = cu.cultureRank || cu.rank || ''; stage = cu.cultureStage || cu.stage || ''; }
+    else if(fr){ type = '凍結胚'; rank = fr.rank || ''; stage = fr.stage || ''; }
+    else if(fs){ type = '新鮮胚'; rank = fs.rank || ''; stage = fs.stage || ''; }
+  }
+  if(!type) type = t.embryoType === '凍結' ? '凍結胚' : t.embryoType === '新鮮' ? '新鮮胚' : t.embryoType === '培養' ? '新鮮胚' : '';
+  if(!rank) rank = t.rank || '';
+  if(!stage) stage = t.stage || '';
+  return { type, rank: rank ? rank + 'ランク' : '', stage: /^(BL|EX|EXB|ExB)$/i.test(stage) ? 'BL〜ExB' : '通常', stageRaw: stage };
+}
+// ドナーの子の枝肉成績が何頭あるか（母牛の名前で数える）
+function tbDamCount(donor){
+  const d = String(donor||'').trim(); if(!d) return null;
+  return tbImp.fat.filter(r => r && String(r.dam||'').trim() === d).length;
+}
+async function openTbImport(){
+  const dlg = document.getElementById('tbDialog');
+  dlg.classList.add('open');
+  document.getElementById('tbRows').innerHTML = '<div class="tb-note">繁殖管理の外部授精簿を読み込んでいます…</div>';
+  try{ await tbLoad(); }catch(e){}
+  if(!tbImp.book.length){ document.getElementById('tbRows').innerHTML = '<div class="tb-note">外部授精簿の記録が読めませんでした。繁殖管理と同じアカウントでログインしているか確認してください。</div>'; return; }
+  const farms = [...new Set(tbImp.book.map(t => t.farmName).filter(Boolean))].sort((a,b) => a.localeCompare(b,'ja'));
+  const fs = document.getElementById('tbFarm');
+  const cur = document.getElementById('clientName')?.value || '';
+  fs.innerHTML = farms.map(f => `<option${cur && (cur.includes(f) || f.includes(cur.replace(/様|御中/g,'').trim())) ? ' selected' : ''}>${escapeHtml(f)}</option>`).join('');
+  // 期間：その牧場の一番新しい移植月
+  tbSetDefaultPeriod();
+  fs.onchange = () => { tbSetDefaultPeriod(); tbBuild(); };
+  document.getElementById('tbFrom').onchange = tbBuild;
+  document.getElementById('tbTo').onchange = tbBuild;
+  tbBuild();
+}
+function tbSetDefaultPeriod(){
+  const farm = document.getElementById('tbFarm').value;
+  const ds = tbImp.book.filter(t => t.farmName === farm && t.transferDate).map(t => t.transferDate).sort();
+  const last = ds[ds.length-1] || new Date().toISOString().slice(0,10);
+  document.getElementById('tbFrom').value = last.slice(0,7) + '-01';
+  document.getElementById('tbTo').value = last;
+}
+function tbBuild(){
+  const farm = document.getElementById('tbFarm').value, from = document.getElementById('tbFrom').value, to = document.getElementById('tbTo').value;
+  const recs = tbImp.book.filter(t => t.farmName === farm && t.transferDate && (!from || t.transferDate >= from) && (!to || t.transferDate <= to))
+    .sort((a,b) => a.transferDate.localeCompare(b.transferDate) || String(a.embryoNo).localeCompare(String(b.embryoNo)));
+  // 同じ日・同じ受け牛に入れた胚は1行にまとめる（2卵・3卵移植）
+  const groups = [];
+  recs.forEach(t => {
+    const key = t.transferDate + '|' + (t.recipientNationalId || t.recipientName || t.id);
+    let g = groups.find(x => x.key === key);
+    if(!g){ g = { key, date: t.transferDate, recs: [] }; groups.push(g); }
+    g.recs.push(t);
+  });
+  tbImp.rows = groups.map(g => {
+    // 2卵以上入れたときは、低いほうのランクで料金を決める（例：A と B なら B）
+    const infos = g.recs.map(tbEmbryoInfo);
+    const order = x => x.rank === 'Aランク' ? 0 : x.rank === 'Bランク' ? 1 : x.rank ? 2 : -1;
+    const info = { ...infos.reduce((w, x) => order(x) > order(w) ? x : w, infos[0]) };
+    if(infos.length > 1) info.stageRaw = infos.map(x => (x.rank || '?').replace('ランク','') + (x.stageRaw ? ' ' + x.stageRaw : '')).join('・');
+    const t = g.recs[0];
+    const cnt = tbDamCount(t.donor);
+    const breed = /全国和牛/.test(t.regOrg||'') ? '黒毛和種' : '褐毛和種';
+    return { date: g.date, recs: g.recs, info, breed, donor: t.donor||'', sire: t.sire||'',
+      nos: g.recs.map(r => r.embryoNo).filter(Boolean), cnt, under3: cnt !== null && cnt < 3,
+      damaMoto: g.recs.some(r => r.damaMoto), outcome: g.recs.some(r => r.pregResult === '+') ? '受胎○' : g.recs.some(r => r.pregResult === '-') ? '受胎×' : '',
+      recipient: t.recipientName || t.recipientNationalId || '' };
+  });
+  tbRender();
+}
+function tbRowPrice(r){
+  if(!r.outcome) return null;
+  return computeEggPrice({ type: r.info.type, rank: r.info.rank, stage: r.info.stage, outcome: r.outcome, damaMoto: r.damaMoto, under3: r.under3 });
+}
+function tbRowName(r){
+  let name = `受精卵（${r.breed}）${r.info.type}`;
+  if(r.info.type === '凍結胚' && r.info.rank === 'Aランク' && r.info.stage === 'BL〜ExB') name += '（BL〜ExB）';
+  if(r.info.rank && r.info.type !== '培養胚（試験卵）') name += '-' + r.info.rank;
+  const n = r.nos.length;
+  if(r.damaMoto) name += n > 1 ? `（ダメもと${n}卵移植）` : '（ダメもと移植）';
+  else if(n > 1) name += `（${n}卵移植）`;
+  name += `　${r.outcome}`;
+  if(r.under3) name += '（枝肉成績3頭未満）';
+  const l2 = []; if(r.donor) l2.push(`ドナー：${r.donor}`); if(r.sire) l2.push(`種雄牛：${r.sire}`);
+  if(l2.length) name += '\n' + l2.join('　');
+  if(n) name += '\n胚番号：' + r.nos.join('、');
+  return name;
+}
+function tbRender(){
+  const box = document.getElementById('tbRows');
+  if(!tbImp.rows.length){ box.innerHTML = '<div class="tb-note">この期間の移植記録はありません。</div>'; tbSummary(); return; }
+  box.innerHTML = tbImp.rows.map((r, i) => {
+    const p = tbRowPrice(r);
+    const kind = `${r.info.type || '<span class="tb-warn">状態不明</span>'} ${r.info.rank ? '<b>' + r.info.rank + '</b>' : (r.info.type === '培養胚（試験卵）' ? '' : '<span class="tb-warn">ランク不明</span>')}${r.info.stageRaw ? '（' + escapeHtml(r.info.stageRaw) + '）' : ''}`;
+    return `<div class="tb-row">
+      <div class="tb-head"><span>${toWareki(r.date)}</span><span>${kind}</span><span class="tb-price">${!r.outcome ? '<span class="tb-warn">受胎を選んでください</span>' : p === null ? '<span class="tb-warn">料金表にない（単価は手で）</span>' : '¥' + p.toLocaleString()}</span></div>
+      <div class="tb-sub">${escapeHtml(r.donor)} × ${escapeHtml(r.sire)}　胚番号：${escapeHtml(r.nos.join('、') || '—')}${r.recipient ? '　受け牛：' + escapeHtml(r.recipient) : ''}</div>
+      <div class="tb-ctl">
+        <span class="tb-seg">${['受胎○','受胎×'].map(o => `<button type="button" class="${r.outcome === o ? 'on ' + (o === '受胎○' ? 'ok' : 'ng') : ''}" onclick="tbSet(${i},'outcome','${o}')">${o}</button>`).join('')}</span>
+        <label><input type="checkbox" ${r.damaMoto ? 'checked' : ''} onchange="tbSet(${i},'damaMoto',this.checked)"> ダメもと</label>
+        <label><input type="checkbox" ${r.under3 ? 'checked' : ''} onchange="tbSet(${i},'under3',this.checked)"> 成績3頭未満 <span class="tb-cnt">${r.cnt === null ? '' : '（' + escapeHtml(r.donor) + 'の枝肉成績 ' + r.cnt + '頭）'}</span></label>
+      </div>
+    </div>`;
+  }).join('');
+  tbSummary();
+}
+window.tbSet = (i, k, v) => { tbImp.rows[i][k] = v; tbRender(); };
+// 移植料の頭数（ダメもと・試験卵で受胎しなかったときは技術料なし）
+function tbFeeCount(rows){
+  return rows.filter(r => !((r.damaMoto || r.info.type === '培養胚（試験卵）') && r.outcome === '受胎×')).length;
+}
+function tbSummary(){
+  const rows = tbImp.rows, left = rows.filter(r => !r.outcome).length;
+  const ok = document.getElementById('tbOk');
+  ok.disabled = !rows.length || left > 0;
+  document.getElementById('tbMsg').textContent = !rows.length ? '' : left ? `受胎○／×がまだ ${left} 件選ばれていません` : `受精卵 ${rows.length} 行・移植料 ${[...new Set(rows.map(r => r.date))].length} 行を明細に追加します`;
+}
+function tbApply(){
+  const fee = (store.presets||[]).find(p => /移植料/.test(p.name)) || { name: '受精卵移植料', unit: '頭', price: 0, taxCat: '10' };
+  const dates = [...new Set(tbImp.rows.map(r => r.date))];
+  dates.forEach(d => {
+    const rs = tbImp.rows.filter(r => r.date === d);
+    const n = tbFeeCount(rs);
+    if(n) items.push(blankItemRow(fee.name, fee.unit || '頭', n, fee.price || 0, fee.taxCat || '10', toWareki(d)));
+    rs.forEach(r => items.push(blankItemRow(tbRowName(r), '頭', 1, tbRowPrice(r) ?? 0, '10', toWareki(d))));
+  });
+  // 何も入っていない空行は消しておく
+  for(let i = items.length - 1; i >= 0; i--){ const it = items[i]; if(!String(it.name||'').trim() && !Number(it.price)) items.splice(i, 1); }
+  renderItems(); recalc();
+  document.getElementById('tbDialog').classList.remove('open');
+}
+document.getElementById('btnTbImport').addEventListener('click', openTbImport);
+document.getElementById('tbCancel').addEventListener('click', () => document.getElementById('tbDialog').classList.remove('open'));
+document.getElementById('tbOk').addEventListener('click', tbApply);
+
 document.getElementById('btnToggleHist').addEventListener('click', (e)=>{
   const panel = document.getElementById('historyPanel');
   const showing = panel.style.display !== 'none';
@@ -1828,6 +1999,19 @@ document.getElementById('importFileInput').addEventListener('change', (e) => {
     <textarea id="idDialogInput" inputmode="numeric" placeholder="1234567890"></textarea>
     <div class="msg" id="idDialogMsg"></div>
     <div class="acts"><button type="button" id="idDialogSkip">入れない</button><button type="button" class="primary" id="idDialogOk">品目に入れる</button></div>
+  </div>
+</div>
+<div class="id-dialog tb-dialog no-print" id="tbDialog">
+  <div class="box">
+    <div style="font-weight:700;font-size:14px;margin-bottom:8px;">📥 外部授精簿から取り込む</div>
+    <div class="tb-filter">
+      <label>牧場<select id="tbFarm"></select></label>
+      <label>期間<input type="date" id="tbFrom"><span>〜</span><input type="date" id="tbTo"></label>
+    </div>
+    <div class="tb-note">状態・ランク・ステージ・ドナー×種雄牛・胚番号は記録から入ります。<b>受胎○／×</b>を選んでください（妊鑑結果が入っている牛は選ばれています）。同じ日に同じ牛へ入れた胚は1行にまとめます。</div>
+    <div id="tbRows" class="tb-rows"></div>
+    <div class="msg" id="tbMsg"></div>
+    <div class="acts"><button type="button" id="tbCancel">やめる</button><button type="button" class="primary" id="tbOk">明細に追加</button></div>
   </div>
 </div>
 </body>
