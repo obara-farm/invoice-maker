@@ -115,7 +115,16 @@
   table.items tbody td input, table.items tbody td select, table.items tbody td textarea{
     width:100%;border:none;background:transparent;font-family:'Noto Sans JP',sans-serif;font-size:12.5px;color:var(--ink);resize:none;
   }
-  table.items tbody td textarea{height:34px;}
+  table.items tbody td textarea{height:34px;line-height:1.5;overflow:hidden;}
+  .name-print{display:none;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;font-size:12px;}
+  .id-dialog{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:1000;padding:16px;}
+  .id-dialog.open{display:flex;}
+  .id-dialog .box{background:#fff;border-radius:10px;padding:18px;width:100%;max-width:420px;font-size:13px;}
+  .id-dialog textarea{width:100%;border:1px solid var(--line);border-radius:6px;font-size:16px;padding:8px;font-family:'Noto Sans JP',sans-serif;height:84px;letter-spacing:.05em;}
+  .id-dialog .msg{font-size:11.5px;color:var(--ink-soft);margin:6px 0;min-height:16px;}
+  .id-dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:8px;}
+  .id-dialog .acts button{padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:#fff;font-size:13px;}
+  .id-dialog .acts button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;}
   table.items tbody td.num input{text-align:right;}
   table.items tbody td.ctr input, table.items tbody td.ctr select{text-align:center;}
   table.items tbody td.amt{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
@@ -241,6 +250,12 @@
     h1.brand,.brand-sub{display:none;}
     .sheet{border:none;padding:0;}
     input,textarea,select{color:var(--ink) !important;}
+    table.items tbody td textarea{display:none !important;}
+    table.items tbody td .name-print{display:block !important;}
+    table.items tbody td input{overflow:visible;}
+    table.items col:last-child{width:0 !important;}
+    table.items select{appearance:none;-webkit-appearance:none;background:none;}
+    table.items thead th:last-child{display:none;}
     body.printing-pricelist .sheet,
     body.printing-pricelist .toolbar,
     body.printing-pricelist .history,
@@ -352,7 +367,7 @@
 
     <table class="items">
       <colgroup>
-        <col style="width:11%"><col style="width:30%"><col style="width:13%"><col style="width:9%"><col style="width:8%"><col style="width:11%"><col style="width:15%"><col style="width:6%">
+        <col style="width:10%"><col style="width:38%"><col style="width:11%"><col style="width:7%"><col style="width:7%"><col style="width:9%"><col style="width:12%"><col style="width:6%">
       </colgroup>
       <thead>
         <tr>
@@ -662,6 +677,41 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// 品目欄は中身に合わせて高さを伸ばす（長い品目や2行目の胚番号・個体識別番号も全部見えるように）
+function fitItemTextarea(t){
+  t.style.height = 'auto';
+  t.style.height = Math.max(34, t.scrollHeight + 2) + 'px';
+}
+// 受精卵移植料：移植した牛の個体識別番号（10桁）を品目の2行目に入れる
+function toHalfDigits(s){ return String(s||'').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)); }
+function parseCowIds(text){ return toHalfDigits(text).split(/[\s,、，・\/]+/).map(x => x.replace(/[^0-9]/g,'')).filter(Boolean); }
+function askRecipientIds(idx){
+  const dlg = document.getElementById('idDialog');
+  const ta = document.getElementById('idDialogInput');
+  const msg = document.getElementById('idDialogMsg');
+  ta.value = ''; msg.textContent = '';
+  dlg.classList.add('open');
+  setTimeout(() => ta.focus(), 50);
+  const check = () => {
+    const ids = parseCowIds(ta.value);
+    const bad = ids.filter(x => x.length !== 10);
+    msg.style.color = bad.length ? '#c0392b' : 'var(--ink-soft)';
+    msg.textContent = !ids.length ? '' : bad.length ? `10桁になっていない番号があります：${bad.join('、')}` : `${ids.length}頭（数量も${ids.length}にします）`;
+    return { ids, bad };
+  };
+  ta.oninput = check;
+  document.getElementById('idDialogSkip').onclick = () => dlg.classList.remove('open');
+  document.getElementById('idDialogOk').onclick = () => {
+    const { ids, bad } = check();
+    if(!ids.length){ dlg.classList.remove('open'); return; }
+    if(bad.length && !confirm('10桁でない番号がありますが、このまま入れますか？')) return;
+    const it = items[idx]; if(!it){ dlg.classList.remove('open'); return; }
+    it.name = it.name.replace(/\n(個体識別番号|移植牛)：.*$/s, '') + '\n移植牛：' + ids.join('\n　　　　');
+    it.qty = ids.length;
+    renderItems(); recalc();
+    dlg.classList.remove('open');
+  };
+}
 function renderItems(){
   const body = document.getElementById('itemsBody');
   body.innerHTML = '';
@@ -669,7 +719,7 @@ function renderItems(){
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><input type="text" value="${escapeHtml(it.date)}" data-idx="${idx}" data-field="date" placeholder="R7/9/4"></td>
-      <td><textarea data-idx="${idx}" data-field="name" placeholder="品目名・備考">${escapeHtml(it.name)}</textarea></td>
+      <td><textarea data-idx="${idx}" data-field="name" placeholder="品目名・備考">${escapeHtml(it.name)}</textarea><div class="name-print">${escapeHtml(it.name)}</div></td>
       <td class="num"><input type="number" step="any" value="${it.price}" data-idx="${idx}" data-field="price"></td>
       <td class="num"><input type="number" step="any" value="${it.qty}" data-idx="${idx}" data-field="qty"></td>
       <td class="ctr"><input type="text" value="${escapeHtml(it.unit)}" data-idx="${idx}" data-field="unit"></td>
@@ -704,12 +754,18 @@ function renderItems(){
       const field = e.target.dataset.field;
       const val = (field === 'qty' || field === 'price') ? (parseFloat(e.target.value)||0) : e.target.value;
       items[idx][field] = val;
+      if(field === 'name'){
+        const pr = e.target.parentElement.querySelector('.name-print');
+        if(pr) pr.textContent = val;
+        fitItemTextarea(e.target);
+      }
       recalc();
       const row = body.children[idx];
       const amtCell = row.querySelector('.amt');
       if(amtCell) amtCell.textContent = '¥' + yen(items[idx].qty*items[idx].price);
     });
   });
+  body.querySelectorAll('textarea[data-field="name"]').forEach(fitItemTextarea);
   body.querySelectorAll('.rmBtn').forEach(btn => {
     btn.addEventListener('click', e => {
       const idx = +e.target.dataset.idx;
@@ -976,7 +1032,16 @@ function renderQuickadd(){
         <input type="checkbox" id="eggUnder3" style="margin:0;">ドナー牛の枝肉成績3頭未満
       </label>
     </div>
-    <div class="egg-preview">品目名 → <strong id="eggPreviewName">受精卵（黒毛和種）</strong><span class="egg-price-hint" id="eggPriceHint"></span></div>
+    <div class="egg-row">
+      <span class="egg-row-label">内容</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1;">
+        <input type="text" id="eggDonor" placeholder="ドナー（例: はれみ）" style="flex:1;min-width:110px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;padding:7px 9px;">
+        <span style="align-self:center;">×</span>
+        <input type="text" id="eggSire" placeholder="種雄牛（例: 美津照重）" style="flex:1;min-width:110px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;padding:7px 9px;">
+        <input type="text" id="eggNo" placeholder="胚番号（例: 25E04B2）" style="flex:1 1 100%;border:1px solid var(--line);border-radius:6px;font-size:12.5px;padding:7px 9px;">
+      </div>
+    </div>
+    <div class="egg-preview">品目名 → <strong id="eggPreviewName" style="white-space:pre-wrap;">受精卵（黒毛和種）</strong><span class="egg-price-hint" id="eggPriceHint"></span></div>
     <div class="egg-actions">
       <input type="number" id="eggPrice" placeholder="単価（任意）">
       <input type="text" id="eggUnit" placeholder="単位" value="頭">
@@ -1012,6 +1077,7 @@ function renderQuickadd(){
         items.push(blankItemRow(p.name, p.unit, 1, p.price||0, p.taxCat || '10'));
         renderItems();
         recalc();
+        if(/移植/.test(p.name) && !/受精卵（/.test(p.name)) askRecipientIds(items.length - 1);
       });
       body.appendChild(btn);
     });
@@ -1281,6 +1347,14 @@ function eggComposeName(){
   if(eggState.damaMoto) name += '（ダメもと移植）';
   name += `　${eggState.outcome}`;
   if(eggState.under3) name += '（枝肉成績3頭未満）';
+  // 2行目：ドナー・種雄牛、3行目：胚番号（入っている分だけ）
+  const v = id => ((document.getElementById(id) || {}).value || '').trim();
+  const donor = v('eggDonor'), sire = v('eggSire'), no = v('eggNo');
+  const line2 = [];
+  if(donor) line2.push(`ドナー：${donor}`);
+  if(sire) line2.push(`種雄牛：${sire}`);
+  if(line2.length) name += '\n' + line2.join('　');
+  if(no) name += `\n胚番号：${no}`;
   return name;
 }
 
@@ -1401,6 +1475,10 @@ function onEggSelectionChange(){
 }
 
 function bindEggBuilderEvents(){
+  ['eggDonor','eggSire','eggNo'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('input', () => { document.getElementById('eggPreviewName').textContent = eggComposeName(); });
+  });
   document.getElementById('btnAddBreed').addEventListener('click', async () => {
     const val = document.getElementById('newBreedInput').value.trim();
     if(!val) return;
@@ -1428,6 +1506,8 @@ function bindEggBuilderEvents(){
     items.push(blankItemRow(name, unit, 1, price));
     renderItems();
     recalc();
+    ['eggDonor','eggSire','eggNo'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+    renderEggBuilder();
     // 自動計算できなかった組み合わせの場合のみ、次回用に単価を記憶する
     if(computeEggPrice(eggState) === null){
       store.eggPrices = store.eggPrices || {};
@@ -1684,5 +1764,14 @@ document.getElementById('importFileInput').addEventListener('change', (e) => {
   reader.readAsText(file);
 });
 </script>
+<div class="id-dialog no-print" id="idDialog">
+  <div class="box">
+    <div style="font-weight:700;margin-bottom:6px;">移植した牛の個体識別番号（10桁）</div>
+    <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:6px;">何頭かまとめて移植したときは、改行かスペースで区切って入れてください。入れた頭数が数量になります。</div>
+    <textarea id="idDialogInput" inputmode="numeric" placeholder="1234567890"></textarea>
+    <div class="msg" id="idDialogMsg"></div>
+    <div class="acts"><button type="button" id="idDialogSkip">入れない</button><button type="button" class="primary" id="idDialogOk">品目に入れる</button></div>
+  </div>
+</div>
 </body>
 </html>
