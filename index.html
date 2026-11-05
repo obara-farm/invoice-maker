@@ -695,17 +695,29 @@ function itemNameHTML(name){
   const lines = String(name || '').split('\n');
   if(!lines.join('').trim()) return '<span class="nm-empty">品目名・備考</span>';
   let main = lines[0];
-  const subs = lines.slice(1);
+  let subs = lines.slice(1);
   const tags = [];
-  if(/^受精卵/.test(main)){
-    // 前の書き方「…受胎○=にわか × 光晴重」は、ドナー・種雄牛の行に分けて見せる（保存されている文字はそのまま）
-    const m = main.match(/^(.*?)[=＝]\s*(.+?)\s*[×xX✕]\s*(.+)$/);
-    if(m){ main = m[1]; subs.unshift(`ドナー：${m[2].trim()}　種雄牛：${m[3].trim()}`); }
+  if(/^受精卵/.test(main) && !/移植料/.test(main)){
     // 受胎○／受胎×・ダメもと・3頭未満は小さな札にする
     main = main.replace(/[\s\u3000]*(受胎[○〇×✕])[\s\u3000]*/g, (_, t) => { tags.push([t, /[○〇]/.test(t) ? 'ok' : 'ng']); return ' '; });
-    main = main.replace(/（ダメもと移植）/g, () => { tags.push(['ダメもと', '']); return ''; });
-    main = main.replace(/（枝肉成績3頭未満）/g, () => { tags.push(['成績3頭未満', '']); return ''; });
-    main = main.replace(/-([ABＡＢ]ランク)/g, ' $1').replace(/）(?=[^\s（])/, '）').trim();
+    main = main.replace(/（ダメもと(.*?)移植）|ダメもと/g, (_, x) => { tags.push(['ダメもと' + (x || ''), '']); return ' '; });
+    main = main.replace(/（?(?:枝肉)?成績3頭未満）?/g, () => { tags.push(['成績3頭未満', '']); return ' '; });
+    // 前の書き方「…=にわか × 光晴重」「…Aランク みなと × 幸泉」は、ドナー・種雄牛の行に分けて見せる（保存されている文字はそのまま）
+    main = main.replace(/[=＝]/g, ' ');
+    const m = main.match(/([^\s\u3000（）]+)[\s\u3000]*[×xX✕][\s\u3000]*([^\s\u3000（）]+)/);
+    if(m){
+      const donor = m[1].replace(/^.*?[ABＡＢ]ランク/, '');
+      main = main.replace(m[0], m[0].startsWith(m[1]) && donor !== m[1] ? m[1].slice(0, m[1].length - donor.length) : ' ');
+      if(!subs.some(l => /^ドナー：/.test(l))) subs.unshift(`ドナー：${donor}　種雄牛：${m[2]}`);
+    }
+    main = main.replace(/-([ABＡＢ]ランク)/g, ' $1').replace(/[\s\u3000]+/g, ' ').trim();
+  }
+  if(/移植料/.test(main)){
+    // 移植した牛の番号だけが並んでいる前の書き方にも「移植牛：」をつけてそろえる
+    const idLine = l => /^[\s\u3000]*[0-9０-９]{10}[\s\u3000]*$/.test(l);
+    if(subs.length && subs.every(idLine)){
+      subs = subs.map((l, k) => (k === 0 ? '移植牛：' : '\u3000\u3000\u3000\u3000') + l.trim());
+    }
   }
   return '<span class="nm-main">' + escapeHtml(main) + '</span>' +
     tags.map(([t, c]) => `<span class="nm-tag ${c}">${escapeHtml(t)}</span>`).join('') +
