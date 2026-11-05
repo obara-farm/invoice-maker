@@ -121,7 +121,7 @@
   .name-print .nm-sub{display:block;font-size:11px;color:var(--ink-soft);padding-left:1em;line-height:1.55;}
   .name-print .nm-empty{color:#b9b4aa;}
   .name-print .nm-rank{font-weight:800;color:var(--ink);letter-spacing:.02em;}
-  .name-print .nm-mark{margin-right:3px;font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;}
+  .name-print .nm-mark{margin-right:4px;display:inline-block;vertical-align:-3px;font-size:1.15em;}
   .name-print .nm-kind{font-weight:800;color:var(--ink);font-size:1.08em;padding:0 2px;}
   .name-print .nm-tags{display:flex;flex-wrap:wrap;gap:4px;padding-left:11px;margin:2px 0 1px;}
   .name-print .nm-tag{display:inline-block;font-size:10.5px;line-height:1.4;padding:0 6px;margin-left:0;border:1px solid var(--line);border-radius:3px;color:var(--ink-soft);vertical-align:1px;white-space:nowrap;}
@@ -297,7 +297,18 @@
     body.printing-pricelist .toolbar,
     body.printing-pricelist .history,
     body.printing-pricelist .edit-banner{display:none !important;}
-    body.printing-pricelist .pricelist-panel{display:block !important;}
+    body.printing-pricelist .pricelist-panel{display:block !important;border:none;padding:0;margin:0;}
+    .pricelist-panel h2{font-size:18px;margin-bottom:14px;}
+    table.pricelist{font-size:12px;table-layout:fixed;}
+    table.pricelist th{background:none !important;color:var(--ink) !important;border-top:2px solid var(--ink);border-bottom:1px solid var(--ink);padding:6px 8px;font-size:11px;white-space:nowrap;}
+    table.pricelist td{padding:7px 8px;}
+    table.pricelist tbody tr{break-inside:avoid;}
+    table.pricelist tbody tr:nth-child(even){background:none;}
+    table.pricelist td.remark{font-size:10.5px;line-height:1.5;}
+    table.pricelist th:nth-child(1),table.pricelist td:nth-child(1){width:36% !important;white-space:normal;}
+    table.pricelist th:nth-child(2),table.pricelist td:nth-child(2),table.pricelist th:nth-child(3),table.pricelist td:nth-child(3){width:17% !important;}
+    table.pricelist th:nth-child(4),table.pricelist td:nth-child(4){width:30% !important;padding-left:14px;}
+    .pricelist-note{font-size:10.5px;line-height:1.7;}
     .no-print{display:none !important;}
   }
   .pricelist-panel{background:#fff;border:1px solid var(--line);border-radius:8px;padding:28px 34px;margin-bottom:20px;}
@@ -751,7 +762,13 @@ function itemNameHTML(name){
   // 状態（新鮮胚・凍結胚・培養胚）とランクは太字にして見分けやすく
   const mainHTML = escapeHtml(main).replace(/(新鮮胚|凍結胚|培養胚（試験卵）|培養胚)/g, '<b class="nm-kind">$1</b>').replace(/([ABＡＢ]ランク)/g, '<b class="nm-rank">$1</b>');
   // 先頭に絵文字：凍結胚は❄️、新鮮胚は🌱、培養胚は🧫（繁殖管理の外部授精簿と同じ）
-  const mark = /凍結胚/.test(main) ? '❄️' : /新鮮胚/.test(main) ? '🌱' : /培養胚/.test(main) ? '🧫' : '';
+  // 絵文字はPDFにすると消えることがあるので、同じ形の小さな絵（SVG）で描く
+  const ICON = {
+    frozen: '<svg viewBox="0 0 24 24" width="1em" height="1em" aria-label="凍結"><g stroke="#2f7fc1" stroke-width="2.2" stroke-linecap="round" fill="none"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7"/><path d="M9 4l3 2.5L15 4M9 20l3-2.5 3 2.5M3.6 10.5l3.6-.5-1.3-3.4M20.4 13.5l-3.6.5 1.3 3.4M3.6 13.5l3.6.5-1.3 3.4M20.4 10.5l-3.6-.5 1.3-3.4"/></g></svg>',
+    fresh: '<svg viewBox="0 0 24 24" width="1em" height="1em" aria-label="新鮮"><path d="M12 22V11" stroke="#3d8b3d" stroke-width="2.2" stroke-linecap="round" fill="none"/><path d="M12 12C12 6.5 8 4 3 4c0 5.5 4 8 9 8z" fill="#5cb85c"/><path d="M12 14c0-5 3.5-7.5 9-7.5 0 5-3.5 7.5-9 7.5z" fill="#3d8b3d"/></svg>',
+    culture: '<svg viewBox="0 0 24 24" width="1em" height="1em" aria-label="培養"><ellipse cx="12" cy="14" rx="10" ry="6" fill="none" stroke="#8a5cc2" stroke-width="2"/><circle cx="9" cy="14" r="1.6" fill="#8a5cc2"/><circle cx="14" cy="12.5" r="1.3" fill="#8a5cc2"/><circle cx="15" cy="16" r="1.1" fill="#8a5cc2"/></svg>'
+  };
+  const mark = /凍結胚/.test(main) ? ICON.frozen : /新鮮胚/.test(main) ? ICON.fresh : /培養胚/.test(main) ? ICON.culture : '';
   return '<span class="nm-main">' + (mark ? '<span class="nm-mark">' + mark + '</span>' : '') + mainHTML + '</span>' + tagLine +
     subs.map(l => l.replace(/^ドナー：([^\s\u3000]*)[\s\u3000]*種雄牛：([^\s\u3000]*)$/, '$1×$2').replace(/^ドナー：([^\s\u3000]+)$/, '$1'))
       .map(l => '<span class="nm-sub">' + escapeHtml(l) + '</span>').join('');
