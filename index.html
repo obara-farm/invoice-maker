@@ -116,7 +116,13 @@
     width:100%;border:none;background:transparent;font-family:'Noto Sans JP',sans-serif;font-size:12.5px;color:var(--ink);resize:none;
   }
   table.items tbody td textarea{height:34px;line-height:1.5;overflow:hidden;}
-  .name-print{display:none;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;font-size:12px;}
+  .name-print{display:block;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;font-size:12.5px;cursor:text;min-height:20px;padding:1px 0;}
+  .name-print .nm-main{font-weight:500;color:var(--ink);}
+  .name-print .nm-sub{display:block;font-size:11px;color:var(--ink-soft);padding-left:1em;line-height:1.55;}
+  .name-print .nm-empty{color:#b9b4aa;}
+  td.name-cell textarea{display:none;}
+  td.name-cell.editing textarea{display:block;}
+  td.name-cell.editing .name-print{display:none;}
   .id-dialog{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:1000;padding:16px;}
   .id-dialog.open{display:flex;}
   .id-dialog .box{background:#fff;border-radius:10px;padding:18px;width:100%;max-width:420px;font-size:13px;}
@@ -252,6 +258,9 @@
     input,textarea,select{color:var(--ink) !important;}
     table.items tbody td textarea{display:none !important;}
     table.items tbody td .name-print{display:block !important;}
+    .name-print .nm-sub{font-size:10.5px;color:#555;}
+    .name-print .nm-empty{visibility:hidden;}
+    table.items tbody tr{break-inside:avoid;}
     table.items tbody td input{overflow:visible;}
     table.items col:last-child{width:0 !important;}
     table.items select{appearance:none;-webkit-appearance:none;background:none;}
@@ -678,6 +687,13 @@ function escapeHtml(s){
 }
 
 // 品目欄は中身に合わせて高さを伸ばす（長い品目や2行目の胚番号・個体識別番号も全部見えるように）
+// 品目の表示：1行目は品目名、2行目以降（ドナー・胚番号・移植牛など）は小さめ・薄めで字下げ
+function itemNameHTML(name){
+  const lines = String(name || '').split('\n');
+  if(!lines.join('').trim()) return '<span class="nm-empty">品目名・備考</span>';
+  return '<span class="nm-main">' + escapeHtml(lines[0]) + '</span>' +
+    lines.slice(1).map(l => '<span class="nm-sub">' + escapeHtml(l.replace(/^[\u3000 ]+/, m => m)) + '</span>').join('');
+}
 function fitItemTextarea(t){
   t.style.height = 'auto';
   t.style.height = Math.max(34, t.scrollHeight + 2) + 'px';
@@ -719,7 +735,7 @@ function renderItems(){
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><input type="text" value="${escapeHtml(it.date)}" data-idx="${idx}" data-field="date" placeholder="R7/9/4"></td>
-      <td><textarea data-idx="${idx}" data-field="name" placeholder="品目名・備考">${escapeHtml(it.name)}</textarea><div class="name-print">${escapeHtml(it.name)}</div></td>
+      <td class="name-cell"><textarea data-idx="${idx}" data-field="name" placeholder="品目名・備考">${escapeHtml(it.name)}</textarea><div class="name-print" title="クリックで編集">${itemNameHTML(it.name)}</div></td>
       <td class="num"><input type="number" step="any" value="${it.price}" data-idx="${idx}" data-field="price"></td>
       <td class="num"><input type="number" step="any" value="${it.qty}" data-idx="${idx}" data-field="qty"></td>
       <td class="ctr"><input type="text" value="${escapeHtml(it.unit)}" data-idx="${idx}" data-field="unit"></td>
@@ -756,7 +772,7 @@ function renderItems(){
       items[idx][field] = val;
       if(field === 'name'){
         const pr = e.target.parentElement.querySelector('.name-print');
-        if(pr) pr.textContent = val;
+        if(pr) pr.innerHTML = itemNameHTML(val);
         fitItemTextarea(e.target);
       }
       recalc();
@@ -764,6 +780,13 @@ function renderItems(){
       const amtCell = row.querySelector('.amt');
       if(amtCell) amtCell.textContent = '¥' + yen(items[idx].qty*items[idx].price);
     });
+  });
+  body.querySelectorAll('td.name-cell').forEach(td => {
+    const ta = td.querySelector('textarea');
+    td.querySelector('.name-print').addEventListener('click', () => {
+      td.classList.add('editing'); fitItemTextarea(ta); ta.focus();
+    });
+    ta.addEventListener('blur', () => td.classList.remove('editing'));
   });
   body.querySelectorAll('textarea[data-field="name"]').forEach(fitItemTextarea);
   body.querySelectorAll('.rmBtn').forEach(btn => {
