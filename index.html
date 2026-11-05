@@ -506,7 +506,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import { getDatabase, ref, get, set, onValue } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
 
 const firebaseConfig = {
@@ -534,12 +534,42 @@ function setSyncStatus(text, cls){
   el.className = 'sync-status ' + (cls||'');
 }
 
-function waitForAuth(){
-  return new Promise((resolve, reject) => {
-    onAuthStateChanged(auth, (user) => {
-      if(user) resolve(user);
+// ログイン（繁殖管理と同じアカウント）。以前は匿名で自動ログインしていたため、URLを知っていれば誰でも請求書を見られた。
+// 繁殖管理と同じサイト（obara-farm.github.io）なので、どちらかでログインすれば、もう一方も自動でログインされる。
+function showInvLogin(){
+  if(document.getElementById('inv-login')) return;
+  const w = document.createElement('div'); w.id = 'inv-login';
+  w.style.cssText = 'position:fixed;inset:0;background:rgba(15,17,23,.97);z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;';
+  w.innerHTML = '<div style="background:#fff;border-radius:16px;padding:24px;width:100%;max-width:360px;color:#111;font-family:inherit;">'
+    + '<div style="font-size:20px;font-weight:900;margin-bottom:4px;">🧾 請求書作成</div>'
+    + '<div style="font-size:12px;color:#666;margin-bottom:16px;">繁殖管理と同じアカウントでログインしてください</div>'
+    + '<input id="il-email" type="email" placeholder="メールアドレス" autocomplete="email" style="width:100%;box-sizing:border-box;padding:12px;margin-bottom:10px;border-radius:10px;border:1px solid #ccc;font-size:15px;">'
+    + '<input id="il-pass" type="password" placeholder="パスワード" autocomplete="current-password" style="width:100%;box-sizing:border-box;padding:12px;margin-bottom:10px;border-radius:10px;border:1px solid #ccc;font-size:15px;">'
+    + '<div id="il-err" style="font-size:12px;color:#dc2626;min-height:18px;margin-bottom:8px;"></div>'
+    + '<button id="il-btn" style="width:100%;padding:12px;border-radius:10px;border:none;background:#16a34a;color:#fff;font-weight:900;font-size:15px;cursor:pointer;">ログイン</button></div>';
+  document.body.appendChild(w);
+  const go = () => {
+    const e = document.getElementById('il-email').value.trim(), p = document.getElementById('il-pass').value, err = document.getElementById('il-err');
+    if(!e || !p){ err.textContent = 'メールアドレスとパスワードを入れてください'; return; }
+    err.style.color = '#666'; err.textContent = 'ログイン中…';
+    setPersistence(auth, browserLocalPersistence).then(() => signInWithEmailAndPassword(auth, e, p)).catch(x => {
+      err.style.color = '#dc2626'; const c = (x && x.code) || '';
+      err.textContent = /wrong-password|invalid-credential|invalid-login-credentials|user-not-found|invalid-email/.test(c) ? 'メールアドレスかパスワードが違います'
+        : /too-many-requests/.test(c) ? 'しばらく待ってからもう一度試してください'
+        : /network-request-failed/.test(c) ? 'インターネットにつながっていません' : 'ログインできませんでした（' + c + '）';
     });
-    signInAnonymously(auth).catch(reject);
+  };
+  document.getElementById('il-btn').onclick = go;
+  document.getElementById('il-pass').addEventListener('keydown', ev => { if(ev.key === 'Enter') go(); });
+}
+let _invAuthed = false;
+function waitForAuth(){
+  return new Promise((resolve) => {
+    onAuthStateChanged(auth, (user) => {
+      if(user && user.isAnonymous){ signOut(auth); return; }   // 以前の匿名ログインが残っていたら消す
+      if(user){ document.getElementById('inv-login')?.remove(); _invAuthed = true; resolve(user); }
+      else { if(_invAuthed){ location.reload(); return; } setSyncStatus('🔒 ログインしてください', 'error'); showInvLogin(); }
+    });
   });
 }
 
