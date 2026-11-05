@@ -121,6 +121,8 @@
   .name-print .nm-sub{display:block;font-size:11px;color:var(--ink-soft);padding-left:1em;line-height:1.55;}
   .name-print .nm-empty{color:#b9b4aa;}
   .name-print .nm-rank{font-weight:800;color:var(--ink);letter-spacing:.02em;}
+  .name-print .nm-mark{margin-right:3px;font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;}
+  .name-print .nm-kind{font-weight:800;color:var(--ink);font-size:1.08em;padding:0 2px;}
   .name-print .nm-tags{display:flex;flex-wrap:wrap;gap:4px;padding-left:11px;margin:2px 0 1px;}
   .name-print .nm-tag{display:inline-block;font-size:10.5px;line-height:1.4;padding:0 6px;margin-left:0;border:1px solid var(--line);border-radius:3px;color:var(--ink-soft);vertical-align:1px;white-space:nowrap;}
   .name-print .nm-tag.ok{border-color:#2f7d5b;color:#2f7d5b;font-weight:700;}
@@ -728,7 +730,7 @@ function itemNameHTML(name){
     main = main.replace(/（?(?:枝肉)?成績3頭未満）?/g, () => { tags.push(['成績3頭未満', '']); return ' '; });
     // 前の書き方「…=にわか × 光晴重」「…Aランク みなと × 幸泉」は、ドナー・種雄牛の行に分けて見せる（保存されている文字はそのまま）
     main = main.replace(/[=＝]/g, ' ');
-    const m = main.match(/([^\s\u3000（）]+)[\s\u3000]*[×xX✕][\s\u3000]*([^\s\u3000（）]+)/);
+    const m = main.match(/([^\s\u3000（）]+)[\s\u3000]*[×✕][\s\u3000]*([^\s\u3000（）]+)/);
     if(m){
       const donor = m[1].replace(/^.*?[ABＡＢ]ランク/, '');
       main = main.replace(m[0], m[0].startsWith(m[1]) && donor !== m[1] ? m[1].slice(0, m[1].length - donor.length) : ' ');
@@ -746,8 +748,11 @@ function itemNameHTML(name){
   // 札（受胎○／×・ダメもと・3頭未満）は品目名の下に1行にまとめて並べる（途中で改行されて迷子にならないように）
   const tagLine = tags.length ? '<span class="nm-tags">' + tags.map(([t, c]) => `<span class="nm-tag ${c}">${escapeHtml(t)}</span>`).join('') + '</span>' : '';
   // ランク（Aランク・Bランク）は太字にして見分けやすく
-  const mainHTML = escapeHtml(main).replace(/([ABＡＢ]ランク)/g, '<b class="nm-rank">$1</b>');
-  return '<span class="nm-main">' + mainHTML + '</span>' + tagLine +
+  // 状態（新鮮胚・凍結胚・培養胚）とランクは太字にして見分けやすく
+  const mainHTML = escapeHtml(main).replace(/(新鮮胚|凍結胚|培養胚（試験卵）|培養胚)/g, '<b class="nm-kind">$1</b>').replace(/([ABＡＢ]ランク)/g, '<b class="nm-rank">$1</b>');
+  // 先頭に絵文字：凍結胚は❄️、新鮮胚は🌱、培養胚は🧫（繁殖管理の外部授精簿と同じ）
+  const mark = /凍結胚/.test(main) ? '❄️' : /新鮮胚/.test(main) ? '🌱' : /培養胚/.test(main) ? '🧫' : '';
+  return '<span class="nm-main">' + (mark ? '<span class="nm-mark">' + mark + '</span>' : '') + mainHTML + '</span>' + tagLine +
     subs.map(l => l.replace(/^ドナー：([^\s\u3000]*)[\s\u3000]*種雄牛：([^\s\u3000]*)$/, '$1×$2').replace(/^ドナー：([^\s\u3000]+)$/, '$1'))
       .map(l => '<span class="nm-sub">' + escapeHtml(l) + '</span>').join('');
 }
@@ -1764,7 +1769,7 @@ function rowDonorSire(name){
   const xl = lines.slice(1).find(l => /×/.test(l) && !/^(胚番号|移植牛)：/.test(l));
   if(lab){ donor = (lab.match(/ドナー：([^\s　]+)/)||[])[1] || ''; sire = (lab.match(/種雄牛：([^\s　]+)/)||[])[1] || ''; }
   else if(xl){ [donor, sire] = xl.split('×').map(x => x.trim().replace(/^—$/, '')); }
-  else { const m = lines[0].replace(/受胎[○〇×✕]/g, ' ').replace(/[=＝]/g, ' ').match(/([^\s\u3000（）=＝]+)[\s\u3000]*[×xX✕][\s\u3000]*([^\s\u3000（）]+)/); if(m){ donor = m[1].replace(/^.*?[ABＡＢ]ランク/, ''); sire = m[2]; } }
+  else { const m = lines[0].replace(/受胎[○〇×✕]/g, ' ').replace(/[=＝]/g, ' ').match(/([^\s\u3000（）=＝]+)[\s\u3000]*[×✕][\s\u3000]*([^\s\u3000（）]+)/); if(m){ donor = m[1].replace(/^.*?[ABＡＢ]ランク/, ''); sire = m[2]; } }
   return { donor, sire: sire.replace(/受胎.*$/, '') };
 }
 async function fillEmbryoNos(){
