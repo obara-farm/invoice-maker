@@ -299,18 +299,23 @@
     body.printing-pricelist .edit-banner{display:none !important;}
     body.printing-pricelist .pricelist-panel{display:block !important;border:none;padding:0;margin:0;}
     .pricelist-panel h2{font-size:18px;margin-bottom:14px;}
-    table.pricelist{font-size:12px;table-layout:fixed;}
-    table.pricelist th{background:none !important;color:var(--ink) !important;border-top:2px solid var(--ink);border-bottom:1px solid var(--ink);padding:6px 8px;font-size:11px;white-space:nowrap;}
+    table.pricelist{font-size:11.5px;table-layout:fixed;break-inside:avoid;page-break-inside:avoid;}
+    table.pricelist th{background:none !important;color:var(--ink) !important;border-top:2px solid var(--ink);border-bottom:1px solid var(--ink);padding:6px 8px;font-size:10.5px;white-space:normal;line-height:1.4;vertical-align:bottom;}
+    table.pricelist th.num{text-align:right;}
+    .pricelist-note{break-inside:avoid;page-break-inside:avoid;}
     table.pricelist td{padding:7px 8px;}
     table.pricelist tbody tr{break-inside:avoid;}
     table.pricelist tbody tr:nth-child(even){background:none;}
     table.pricelist td.remark{font-size:10.5px;line-height:1.5;}
-    table.pricelist th:nth-child(1),table.pricelist td:nth-child(1){width:36% !important;white-space:normal;}
-    table.pricelist th:nth-child(2),table.pricelist td:nth-child(2),table.pricelist th:nth-child(3),table.pricelist td:nth-child(3){width:17% !important;}
-    table.pricelist th:nth-child(4),table.pricelist td:nth-child(4){width:30% !important;padding-left:14px;}
+    table.pricelist th:nth-child(1),table.pricelist td:nth-child(1){width:33% !important;white-space:normal;}
+    table.pricelist th:nth-child(2),table.pricelist td:nth-child(2),table.pricelist th:nth-child(3),table.pricelist td:nth-child(3){width:16% !important;}
+    table.pricelist th:nth-child(4),table.pricelist td:nth-child(4){width:35% !important;padding-left:22px !important;text-align:left;}
     .pricelist-note{font-size:10.5px;line-height:1.7;}
     .no-print{display:none !important;}
+    .sheet textarea.has-pmirror{display:none !important;}
+    .pmirror{display:block !important;}
   }
+  .pmirror{display:none;white-space:pre-wrap;overflow-wrap:anywhere;}
   .pricelist-panel{background:#fff;border:1px solid var(--line);border-radius:8px;padding:28px 34px;margin-bottom:20px;}
   .pricelist-panel h2{font-family:'Noto Serif JP',serif;font-size:20px;margin:0 0 20px;}
   table.pricelist{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:8px;}
@@ -2079,6 +2084,18 @@ document.getElementById('importFileInput').addEventListener('change', (e) => {
     e.target.value = '';
   };
   reader.readAsText(file);
+});
+
+// 印刷・PDFのとき、振込先・宛先などの入力欄は文字の量に合わせて全部出す（欄の高さで見切れないように）
+window.addEventListener('beforeprint', () => {
+  document.querySelectorAll('.sheet textarea').forEach(ta => {
+    if (ta.closest('table.items')) return;
+    let m = ta.nextElementSibling;
+    if (!m || !m.classList.contains('pmirror')) { m = document.createElement('div'); m.className = 'pmirror'; ta.after(m); ta.classList.add('has-pmirror'); }
+    const cs = getComputedStyle(ta);
+    ['fontSize','lineHeight','fontFamily','fontWeight','padding','textAlign','letterSpacing','color'].forEach(k => m.style[k] = cs[k]);
+    m.textContent = ta.value;
+  });
 });
 </script>
 <div class="id-dialog no-print" id="idDialog">
