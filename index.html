@@ -1815,23 +1815,18 @@ async function openColImport(){
   const pick = farms.find(f => cur && f !== COL_OWN && (f.includes(cur) || cur.includes(f))) || (cur && /小原/.test(cur) ? COL_OWN : farms[0]);
   const fs = document.getElementById('colFarm');
   fs.innerHTML = farms.map(f => `<option${f === pick ? ' selected' : ''}>${escapeHtml(f)}</option>`).join('');
-  colSetDefaultPeriod();
-  fs.onchange = () => { colSetDefaultPeriod(); colBuild(); };
-  document.getElementById('colFrom').onchange = colBuild;
-  document.getElementById('colTo').onchange = colBuild;
+  fs.onchange = colBuild;
   colBuild();
 }
-function colSetDefaultPeriod(){
-  const farm = document.getElementById('colFarm').value;
-  const ds = colImp.cols.filter(c => colFarmOf(c) === farm).map(c => c.date).sort();
-  const last = ds[ds.length - 1] || new Date().toISOString().slice(0, 10);
-  document.getElementById('colFrom').value = last.slice(0, 7) + '-01';
-  document.getElementById('colTo').value = last;
+// その採卵がもう請求書に入っているか（保存した請求書の明細の日付とドナー名で見る）
+function colBilled(r){
+  const d = toWareki(r.date), key = r.donor ? 'ドナー：' + r.donor : '';
+  return (store.invoices || []).some(inv => (inv.items || []).some(it => it.date === d && /過剰排卵|還流回収|検卵/.test(it.name || '') && (!key || String(it.name || '').includes(key))));
 }
 function colBuild(){
-  const farm = document.getElementById('colFarm').value, from = document.getElementById('colFrom').value, to = document.getElementById('colTo').value;
-  colImp.rows = colImp.cols.filter(c => colFarmOf(c) === farm && (!from || c.date >= from) && (!to || c.date <= to))
-    .sort((a, b) => a.date.localeCompare(b.date))
+  const farm = document.getElementById('colFarm').value;
+  colImp.rows = colImp.cols.filter(c => colFarmOf(c) === farm)
+    .sort((a, b) => b.date.localeCompare(a.date))
     .map(c => {
       const cu = c.cultureEmbryos || [];
       const frz = (c.frozenEmbryos || []).length + cu.filter(e => e.cultureResult === 'freeze').length;
@@ -1839,6 +1834,10 @@ function colBuild(){
       return { c, date: c.date, donor: colDonor(c), sire: c.sire || '', rec: Number(c.recovered) || 0, frz, fresh,
         on: { sov: true, flush: true, frz: frz > 0, fresh: fresh > 0 && farm !== COL_OWN } };   // 自家の採卵は新鮮胚処理料を取らない
     });
+  colImp.rows.forEach(r => { r.billed = colBilled(r); });
+  // はじめは、まだ請求していない一番新しい採卵を選んでおく
+  const first = colImp.rows.findIndex(r => !r.billed);
+  colImp.sel = first >= 0 ? first : 0;
   colRender();
 }
 function colRowTotal(r){ return (r.on.sov ? colFee('sov').price : 0) + (r.on.flush ? colFee('flush').price : 0) + (r.on.frz ? colFee('frz').price * r.frz : 0) + (r.on.fresh ? colFee('fresh').price * r.fresh : 0); }
@@ -1847,23 +1846,26 @@ function colRender(){
   if(!colImp.rows.length){ box.innerHTML = '<div class="tb-note">この期間の採卵記録はありません。</div>'; colSummary(); return; }
   const ck = (i, k, label) => `<label><input type="checkbox" ${colImp.rows[i].on[k] ? 'checked' : ''} onchange="colSet(${i},'${k}',this.checked)"> ${label}</label>`;
   const num = (i, k) => `<input type="number" min="0" value="${colImp.rows[i][k]}" onchange="colSetN(${i},'${k}',this.value)" style="width:52px;border:1px solid var(--line);border-radius:6px;padding:3px;font-size:12px;">`;
-  box.innerHTML = colImp.rows.map((r, i) => `<div class="tb-row">
-      <div class="tb-head"><span>${toWareki(r.date)}</span><span><b>${escapeHtml(r.donor || '—')}</b>${r.sire ? ' × ' + escapeHtml(r.sire) : ''}</span><span class="tb-price">¥${yen(colRowTotal(r))}</span></div>
+  box.innerHTML = colImp.rows.map((r, i) => { const on = i === colImp.sel; return `<div class="tb-row" style="cursor:pointer;${on ? 'border:2px solid var(--accent,#2e9e63);background:rgba(46,158,99,.08);' : 'opacity:.75;'}" onclick="colPick(${i})">
+      <div class="tb-head"><span>${on ? '◉' : '○'} ${toWareki(r.date)}</span><span><b>${escapeHtml(r.donor || '—')}</b>${r.sire ? ' × ' + escapeHtml(r.sire) : ''}</span><span class="tb-price">${r.billed ? '<span style="font-size:11px;color:#b45309;font-weight:700;">請求済み</span> ' : ''}${on ? '¥' + yen(colRowTotal(r)) : ''}</span></div>
       <div class="tb-sub">回収 ${r.rec}個　凍結 ${r.frz}個　新鮮 ${r.fresh}個${r.c.lot ? '　ロット ' + escapeHtml(r.c.lot) : ''}</div>
-      <div class="tb-ctl">${ck(i, 'sov', '過剰排卵処置')}${ck(i, 'flush', '回収・検卵')}${ck(i, 'frz', '凍結')}${num(i, 'frz')}個 ${ck(i, 'fresh', '新鮮')}${num(i, 'fresh')}個</div>
-    </div>`).join('');
+      ${on ? `<div class="tb-ctl" onclick="event.stopPropagation()">${ck(i, 'sov', '過剰排卵処置')}${ck(i, 'flush', '回収・検卵')}${ck(i, 'frz', '凍結')}${num(i, 'frz')}個 ${ck(i, 'fresh', '新鮮')}${num(i, 'fresh')}個</div>` : ''}
+    </div>`; }).join('');
   colSummary();
 }
+window.colPick = i => { colImp.sel = i; colRender(); };
 window.colSet = (i, k, v) => { colImp.rows[i].on[k] = v; colRender(); };
 window.colSetN = (i, k, v) => { const n = Math.max(0, parseInt(v, 10) || 0); colImp.rows[i][k] = n; colImp.rows[i].on[k] = n > 0; colRender(); };
 function colSummary(){
-  const rows = colImp.rows, ok = document.getElementById('colOk');
-  const any = rows.some(r => r.on.sov || r.on.flush || (r.on.frz && r.frz) || (r.on.fresh && r.fresh));
-  ok.disabled = !any;
-  document.getElementById('colMsg').textContent = rows.length ? `採卵 ${rows.length} 回・合計 ¥${yen(rows.reduce((a, r) => a + colRowTotal(r), 0))}（税抜）を明細に追加します` : '';
+  const r = colImp.rows[colImp.sel], ok = document.getElementById('colOk');
+  ok.disabled = !(r && (r.on.sov || r.on.flush || (r.on.frz && r.frz) || (r.on.fresh && r.fresh)));
+  const has = items.some(it => String(it.name || '').trim() || Number(it.price));
+  document.getElementById('colMsg').textContent = r ? `${toWareki(r.date)} ${r.donor || ''} の採卵 ¥${yen(colRowTotal(r))}（税抜）を明細に入れます${r.billed ? '（この採卵は請求済みです）' : ''}${has ? '。今の請求書にはもう明細があるので、別の採卵なら先に「＋ 新規請求書」を押してください' : ''}` : '';
 }
 function colApply(){
-  colImp.rows.forEach(r => {
+  const sel = colImp.rows[colImp.sel], sj = document.getElementById('subject');
+  if(sel && sj && !sj.value.trim()) sj.value = `${toWareki(sel.date)} 採卵${sel.donor ? '（' + sel.donor + '）' : ''}`;   // 件名が空なら採卵日とドナーを入れる
+  [sel].filter(Boolean).forEach(r => {
     const d = toWareki(r.date), who = r.donor ? `\nドナー：${r.donor}${r.sire ? '×' + r.sire : ''}` : '';
     const add = (k, qty, extra) => { const f = colFee(k); items.push(blankItemRow(f.name + (extra || ''), f.unit, qty, f.price, f.taxCat, d)); };
     if(r.on.sov) add('sov', 1, who);
@@ -2210,9 +2212,8 @@ window.addEventListener('beforeprint', () => {
     <div style="font-weight:700;font-size:14px;margin-bottom:8px;">🥚 採卵記録から取り込む</div>
     <div class="tb-filter">
       <label>依頼元<select id="colFarm"></select></label>
-      <label>期間<input type="date" id="colFrom"><span>〜</span><input type="date" id="colTo"></label>
     </div>
-    <div class="tb-note">繁殖管理の採卵記録から、1回の採卵ごとに<b>過剰排卵処置・回収検卵作業・胚凍結処理・新鮮胚処理</b>を入れます。凍結と新鮮の個数は記録から入ります（培養胚は、凍結したものを凍結、移植したものを新鮮に数えます。廃棄は数えません）。請求しないものはチェックを外してください。金額はプリセットの値段です。</div>
+    <div class="tb-note">請求する採卵を<b>1回</b>選んでください（請求書は採卵1回ごとに1枚）。選んだ採卵の<b>過剰排卵処置・回収検卵作業・胚凍結処理・新鮮胚処理</b>を入れます。凍結と新鮮の個数は記録から入ります（培養胚は、凍結したものを凍結、移植したものを新鮮に数えます。廃棄は数えません）。請求しないものはチェックを外してください。金額はプリセットの値段です。</div>
     <div id="colRows" class="tb-rows"></div>
     <div class="msg" id="colMsg"></div>
     <div class="acts"><button type="button" id="colCancel">やめる</button><button type="button" class="primary" id="colOk">明細に追加</button></div>
