@@ -426,18 +426,18 @@
         <tr>
           <th class="left">納品日</th>
           <th class="left">品目・納品書番号</th>
-          <th>単価</th>
+          <th>単価<span style="font-size:9px;font-weight:400;">（税抜）</span></th>
           <th>数量</th>
           <th>単位</th>
           <th>税区分</th>
-          <th>価格</th>
+          <th>価格<span style="font-size:9px;font-weight:400;">（税抜）</span></th>
           <th></th>
         </tr>
       </thead>
       <tbody id="itemsBody"></tbody>
     </table>
 
-    <div class="no-print" style="margin:10px 0 6px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" id="btnTbImport" class="tb-import-btn" style="flex:2;min-width:220px;">📥 外部授精簿から受精卵代・移植料を取り込む</button><button type="button" id="btnTbFill" class="tb-import-btn" style="flex:1;min-width:160px;border-style:solid;">🔢 今の明細に胚番号・移植牛を補う</button></div>
+    <div class="no-print" style="margin:10px 0 6px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" id="btnTbImport" class="tb-import-btn" style="flex:2;min-width:220px;">📥 外部授精簿から受精卵代・移植料を取り込む</button><button type="button" id="btnTbFill" class="tb-import-btn" style="flex:1;min-width:160px;border-style:solid;">🔢 今の明細に胚番号・移植牛を補う</button><button type="button" id="btnColImport" class="tb-import-btn" style="flex:2;min-width:220px;">🥚 採卵記録から採卵料を取り込む</button></div>
     <div class="qa-search"><input type="text" id="qaSearch" placeholder="🔍 品目を検索（例：CIDR、受精卵）" autocomplete="off"></div>
     <div class="qa-accordion" id="quickaddContainer"></div>
     <div class="quickadd">
@@ -520,7 +520,7 @@
   </div>
 
   <div class="pricelist-panel" id="pricelistPanel" style="display:none;">
-    <h2>受精卵 卵代料金表</h2>
+    <h2>受精卵 卵代料金表<span style="font-size:13px;font-weight:400;margin-left:8px;">（金額はすべて税抜）</span></h2>
     <p style="font-size:12px;color:var(--ink-soft);margin:-10px 0 16px;">※本表は通常取引の料金です。受精卵補助事業対象の場合は、ステージに関わらず凍結胚一律¥20,000（半額助成適用）となります。</p>
     <table class="pricelist">
       <thead>
@@ -1780,6 +1780,104 @@ function tbApply(){
   document.getElementById('tbDialog').classList.remove('open');
 }
 document.getElementById('btnTbImport').addEventListener('click', openTbImport);
+// ===== 🥚 採卵記録（繁殖管理）から採卵料を取り込む =====
+const COL_OWN = '小原農場（自家の採卵）';
+let colImp = { cols: [], cows: [], rows: [] };
+// 料金はプリセットから探す（なければ最初の値段）
+const COL_FEES = [
+  { k: 'sov', re: /過剰排卵/, def: { name: '過剰排卵処置', unit: '頭', price: 25000 } },
+  { k: 'flush', re: /還流回収|検卵/, def: { name: '子宮内還流回収・検卵作業', unit: '頭', price: 50000 } },
+  { k: 'frz', re: /胚凍結|凍結処理/, def: { name: '胚凍結処理', unit: '個', price: 2000 } },
+  { k: 'fresh', re: /新鮮胚処理/, def: { name: '新鮮胚処理', unit: '個', price: 1000 } }
+];
+const colFee = k => { const f = COL_FEES.find(x => x.k === k); const p = (store.presets || []).find(x => f.re.test(x.name || '')); return p ? { name: p.name, unit: p.unit || f.def.unit, price: Number(p.price) || 0, taxCat: p.taxCat || '10' } : { ...f.def, taxCat: '10' }; };
+async function colLoad(){
+  const base = `data/${SHARED_UID}/`;
+  const [c1, c2, cw] = await Promise.all(['collectionRecordsNew', 'collectionRecords', 'cows']
+    .map(k => get(ref(rtdb, base + k)).then(s => s.exists() ? s.val() : null).catch(() => null)));
+  colImp.cols = [...parseMaybe(c1), ...parseMaybe(c2)].filter(c => c && c.date);
+  colImp.cows = parseMaybe(cw);
+}
+const colFarmOf = c => c.isExternal ? (String(c.externalFarmer || '').trim() || '（依頼元なし）') : COL_OWN;
+function colDonor(c){
+  if(c.isExternal) return String(c.externalCowName || '').trim();
+  const cow = colImp.cows.find(x => x && x.id === c.donorId);
+  return [c.donorId, cow && cow.name].filter(Boolean).join(' ');
+}
+async function openColImport(){
+  const dlg = document.getElementById('colDialog');
+  dlg.classList.add('open');
+  document.getElementById('colRows').innerHTML = '<div class="tb-note">繁殖管理の採卵記録を読み込んでいます…</div>';
+  try{ await colLoad(); }catch(e){}
+  if(!colImp.cols.length){ document.getElementById('colRows').innerHTML = '<div class="tb-note">採卵記録が読めませんでした。繁殖管理と同じアカウントでログインしているか確認してください。</div>'; document.getElementById('colOk').disabled = true; return; }
+  const farms = [...new Set(colImp.cols.map(colFarmOf))].sort((a, b) => (a === COL_OWN) - (b === COL_OWN) || a.localeCompare(b, 'ja'));
+  const cur = (document.getElementById('clientName')?.value || '').replace(/様|御中/g, '').trim();
+  const pick = farms.find(f => cur && f !== COL_OWN && (f.includes(cur) || cur.includes(f))) || (cur && /小原/.test(cur) ? COL_OWN : farms[0]);
+  const fs = document.getElementById('colFarm');
+  fs.innerHTML = farms.map(f => `<option${f === pick ? ' selected' : ''}>${escapeHtml(f)}</option>`).join('');
+  colSetDefaultPeriod();
+  fs.onchange = () => { colSetDefaultPeriod(); colBuild(); };
+  document.getElementById('colFrom').onchange = colBuild;
+  document.getElementById('colTo').onchange = colBuild;
+  colBuild();
+}
+function colSetDefaultPeriod(){
+  const farm = document.getElementById('colFarm').value;
+  const ds = colImp.cols.filter(c => colFarmOf(c) === farm).map(c => c.date).sort();
+  const last = ds[ds.length - 1] || new Date().toISOString().slice(0, 10);
+  document.getElementById('colFrom').value = last.slice(0, 7) + '-01';
+  document.getElementById('colTo').value = last;
+}
+function colBuild(){
+  const farm = document.getElementById('colFarm').value, from = document.getElementById('colFrom').value, to = document.getElementById('colTo').value;
+  colImp.rows = colImp.cols.filter(c => colFarmOf(c) === farm && (!from || c.date >= from) && (!to || c.date <= to))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map(c => {
+      const cu = c.cultureEmbryos || [];
+      const frz = (c.frozenEmbryos || []).length + cu.filter(e => e.cultureResult === 'freeze').length;
+      const fresh = (c.freshEmbryos || []).length + cu.filter(e => e.cultureResult === 'et').length;
+      return { c, date: c.date, donor: colDonor(c), sire: c.sire || '', rec: Number(c.recovered) || 0, frz, fresh,
+        on: { sov: true, flush: true, frz: frz > 0, fresh: fresh > 0 && farm !== COL_OWN } };   // 自家の採卵は新鮮胚処理料を取らない
+    });
+  colRender();
+}
+function colRowTotal(r){ return (r.on.sov ? colFee('sov').price : 0) + (r.on.flush ? colFee('flush').price : 0) + (r.on.frz ? colFee('frz').price * r.frz : 0) + (r.on.fresh ? colFee('fresh').price * r.fresh : 0); }
+function colRender(){
+  const box = document.getElementById('colRows');
+  if(!colImp.rows.length){ box.innerHTML = '<div class="tb-note">この期間の採卵記録はありません。</div>'; colSummary(); return; }
+  const ck = (i, k, label) => `<label><input type="checkbox" ${colImp.rows[i].on[k] ? 'checked' : ''} onchange="colSet(${i},'${k}',this.checked)"> ${label}</label>`;
+  const num = (i, k) => `<input type="number" min="0" value="${colImp.rows[i][k]}" onchange="colSetN(${i},'${k}',this.value)" style="width:52px;border:1px solid var(--line);border-radius:6px;padding:3px;font-size:12px;">`;
+  box.innerHTML = colImp.rows.map((r, i) => `<div class="tb-row">
+      <div class="tb-head"><span>${toWareki(r.date)}</span><span><b>${escapeHtml(r.donor || '—')}</b>${r.sire ? ' × ' + escapeHtml(r.sire) : ''}</span><span class="tb-price">¥${yen(colRowTotal(r))}</span></div>
+      <div class="tb-sub">回収 ${r.rec}個　凍結 ${r.frz}個　新鮮 ${r.fresh}個${r.c.lot ? '　ロット ' + escapeHtml(r.c.lot) : ''}</div>
+      <div class="tb-ctl">${ck(i, 'sov', '過剰排卵処置')}${ck(i, 'flush', '回収・検卵')}${ck(i, 'frz', '凍結')}${num(i, 'frz')}個 ${ck(i, 'fresh', '新鮮')}${num(i, 'fresh')}個</div>
+    </div>`).join('');
+  colSummary();
+}
+window.colSet = (i, k, v) => { colImp.rows[i].on[k] = v; colRender(); };
+window.colSetN = (i, k, v) => { const n = Math.max(0, parseInt(v, 10) || 0); colImp.rows[i][k] = n; colImp.rows[i].on[k] = n > 0; colRender(); };
+function colSummary(){
+  const rows = colImp.rows, ok = document.getElementById('colOk');
+  const any = rows.some(r => r.on.sov || r.on.flush || (r.on.frz && r.frz) || (r.on.fresh && r.fresh));
+  ok.disabled = !any;
+  document.getElementById('colMsg').textContent = rows.length ? `採卵 ${rows.length} 回・合計 ¥${yen(rows.reduce((a, r) => a + colRowTotal(r), 0))}（税抜）を明細に追加します` : '';
+}
+function colApply(){
+  colImp.rows.forEach(r => {
+    const d = toWareki(r.date), who = r.donor ? `\nドナー：${r.donor}${r.sire ? '×' + r.sire : ''}` : '';
+    const add = (k, qty, extra) => { const f = colFee(k); items.push(blankItemRow(f.name + (extra || ''), f.unit, qty, f.price, f.taxCat, d)); };
+    if(r.on.sov) add('sov', 1, who);
+    if(r.on.flush) add('flush', 1, who + `（回収${r.rec}個）`);
+    if(r.on.frz && r.frz) add('frz', r.frz);
+    if(r.on.fresh && r.fresh) add('fresh', r.fresh);
+  });
+  for(let i = items.length - 1; i >= 0; i--){ const it = items[i]; if(!String(it.name || '').trim() && !Number(it.price)) items.splice(i, 1); }
+  renderItems(); recalc();
+  document.getElementById('colDialog').classList.remove('open');
+}
+document.getElementById('btnColImport').addEventListener('click', openColImport);
+document.getElementById('colCancel').addEventListener('click', () => document.getElementById('colDialog').classList.remove('open'));
+document.getElementById('colOk').addEventListener('click', colApply);
 // 前に作った明細（胚番号なし）に、外部授精簿から胚番号を足す。
 // 同じ牧場・同じドナー×種雄牛・納品日の前後10日以内の移植記録を探し、受胎○は妊鑑＋、受胎×は妊鑑−の記録を優先してあてる
 const fromWareki = w => { const m = String(w||'').match(/R\s*(\d+)[\/.](\d+)[\/.](\d+)/); return m ? `${2018 + +m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}` : ''; };
@@ -2105,6 +2203,19 @@ window.addEventListener('beforeprint', () => {
     <textarea id="idDialogInput" inputmode="numeric" placeholder="1234567890"></textarea>
     <div class="msg" id="idDialogMsg"></div>
     <div class="acts"><button type="button" id="idDialogSkip">入れない</button><button type="button" class="primary" id="idDialogOk">品目に入れる</button></div>
+  </div>
+</div>
+<div class="id-dialog tb-dialog no-print" id="colDialog">
+  <div class="box">
+    <div style="font-weight:700;font-size:14px;margin-bottom:8px;">🥚 採卵記録から取り込む</div>
+    <div class="tb-filter">
+      <label>依頼元<select id="colFarm"></select></label>
+      <label>期間<input type="date" id="colFrom"><span>〜</span><input type="date" id="colTo"></label>
+    </div>
+    <div class="tb-note">繁殖管理の採卵記録から、1回の採卵ごとに<b>過剰排卵処置・回収検卵作業・胚凍結処理・新鮮胚処理</b>を入れます。凍結と新鮮の個数は記録から入ります（培養胚は、凍結したものを凍結、移植したものを新鮮に数えます。廃棄は数えません）。請求しないものはチェックを外してください。金額はプリセットの値段です。</div>
+    <div id="colRows" class="tb-rows"></div>
+    <div class="msg" id="colMsg"></div>
+    <div class="acts"><button type="button" id="colCancel">やめる</button><button type="button" class="primary" id="colOk">明細に追加</button></div>
   </div>
 </div>
 <div class="id-dialog tb-dialog no-print" id="tbDialog">
