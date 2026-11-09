@@ -496,6 +496,7 @@
   <div class="history" id="historyPanel" style="display:none;">
     <h2>保存済み請求書</h2>
     <div class="history-list" id="historyList"></div>
+    <div id="trashBox" style="margin-top:14px;"></div>
   </div>
 
   <div class="history" id="statsPanel" style="display:none;">
@@ -1042,6 +1043,7 @@ function renderHistory(){
   list.innerHTML = '';
   if(!store.invoices || store.invoices.length === 0){
     list.innerHTML = '<div class="empty-hist">まだ保存された請求書はありません。</div>';
+    renderTrash();
     return;
   }
   store.invoices.forEach(inv => {
@@ -1070,11 +1072,74 @@ function renderHistory(){
   });
   list.querySelectorAll('.delBtn').forEach(btn=>{
     btn.addEventListener('click', async e=>{
-      store.invoices = store.invoices.filter(x=>x.id!==e.target.dataset.id);
+      const inv = store.invoices.find(x=>x.id===e.target.dataset.id);
+      if(!inv) return;
+      // 押し間違いで消えないように、確かめてから「削除した請求書」へ移す（60日間は戻せる）
+      const ok = await showConfirmModal(`請求書 No.${inv.invNo}（${inv.clientName||''} / ${inv.subject||''}）を削除しますか？\n\n削除した請求書は、下の「🗑 削除した請求書」から60日間は元に戻せます。`);
+      if(!ok) return;
+      store.invoices = store.invoices.filter(x=>x.id!==inv.id);
+      store.trash = store.trash || [];
+      store.trash.unshift({ ...inv, deletedAt: new Date().toISOString() });
       await persistStore();
       renderHistory();
     });
   });
+  renderTrash();
+}
+function renderTrash(){
+  const box = document.getElementById('trashBox'); if(!box) return;
+  const lim = Date.now() - 60*24*3600*1000;
+  store.trash = (store.trash||[]).filter(t => !t.deletedAt || new Date(t.deletedAt).getTime() >= lim);
+  if(!store.trash.length){ box.innerHTML = ''; return; }
+  box.innerHTML = `<details ${store.trash.some(t=>t.rebuilt)?'open':''} style="border:1px solid var(--line,#ddd);border-radius:10px;padding:8px 12px;">
+    <summary style="cursor:pointer;font-weight:700;">🗑 削除した請求書（${store.trash.length}件・60日間は戻せます）</summary>
+    ${store.trash.map((t,i)=>`<div class="history-item" style="opacity:.85;">
+      <div class="hi-main"><span class="hi-no">No.${escapeHtml(t.invNo)}</span><span>${escapeHtml(t.clientName||'')}</span><span>${escapeHtml(t.subject||'')}</span><span class="hi-amt">¥${yen(t.total)}</span>
+        <span style="font-size:11px;color:#b45309;">${t.rebuilt ? '画像から作り直したもの（品目名を確かめてください）' : '削除 ' + escapeHtml(String(t.deletedAt||'').slice(0,10))}</span></div>
+      <div class="hi-actions"><button type="button" onclick="restoreTrash(${i})">元に戻す</button></div>
+    </div>`).join('')}
+  </details>`;
+}
+window.restoreTrash = async (i) => {
+  const t = (store.trash||[])[i]; if(!t) return;
+  const dup = (store.invoices||[]).find(x => x.id === t.id || (x.invNo === t.invNo && x.clientName === t.clientName));
+  if(dup && !(await showConfirmModal(`No.${t.invNo} の請求書はもう履歴にあります。それでも戻しますか？`))) return;
+  const inv = { ...t }; delete inv.deletedAt; delete inv.rebuilt;
+  if(dup && dup.id === inv.id) inv.id = 'inv_' + Date.now();
+  store.invoices = store.invoices || [];
+  store.invoices.push(inv);
+  store.invoices.sort((a,b) => String(b.invDate||'').localeCompare(String(a.invDate||'')) || String(b.invNo||'').localeCompare(String(a.invNo||'')));
+  store.trash.splice(i, 1);
+  await persistStore();
+  renderHistory();
+  showToast(`No.${inv.invNo} を元に戻しました`);
+};
+// 2026/11/9 に消してしまった長島牧場の請求書（No.007 か No.008）を、画像から作り直して「削除した請求書」に入れておく（1回だけ）
+function rebuildLostInvoicesOnce(){
+  if(store.rebuild20261109) return false;
+  store.rebuild20261109 = true;
+  const prof = store.issuerProfile || {};
+  const cl = (store.clients||[]).find(c => /長島/.test(c.name||'')) || {};
+  const base = {
+    clientName: '長島牧場', clientZip: cl.zip || '083-0042', clientAddr: cl.addr || '中川郡池田町字千代田141-3', clientPerson: cl.person || '長島　正典',
+    issuerName: prof.name || '小原家畜診療所', issuerRegNo: prof.regNo || 'T2810833194180', issuerZip: prof.zip || '083-0042', issuerAddr: prof.addr || '北海道中川郡池田町字千代田697', issuerTel: prof.tel || '080-1898-7789',
+    bankInfo: store.bankInfo || '', footerNote: store.footerNote || '誠に恐れ入りますが、振込手数料は御社にてご負担をお願い致します。',
+    savedAt: new Date().toISOString(), deletedAt: new Date().toISOString(), rebuilt: true
+  };
+  const R = (date, name, price, qty, unit) => ({ date, name, unit, qty, price, taxCat: '10' });
+  const lost = [
+    { ...base, id: 'inv_rebuilt_007', invNo: '007', invDate: '2026-09-05', dueDate: '2026-10-30', subject: 'R8.1月～8月分 薬品代＋他技術料', total: 38280,
+      items: [ R('R7/9/4','超音波検査代（妊娠鑑定）',500,33,'頭'), R('R7/9/4','超音波検査代（発情確認）',500,2,'頭'), R('R7/9/4','超音波検査代（繁殖検診）',500,1,'頭'),
+               R('R7/9/4','超音波検査代（排卵確認）',500,2,'頭'), R('R7/9/4','超音波検査代（黄体確認）',500,4,'頭'), R('R8/4/24','PG（レジプロン）',300,20,'ml'),
+               R('R8/4/24','コンサルタン注射液',2000,1,'V'), R('R8/5/2','CIDR',2000,2,'個'), R('R8/7/21','ゴナトロピン3000',1800,1,'A') ] },
+    { ...base, id: 'inv_rebuilt_008', invNo: '008', invDate: '2026-10-01', dueDate: '2026-11-30', subject: 'R8.5月～7月分 受精卵代＋移植料', total: 38500,
+      items: [ R('R8/5/1','受精卵（褐毛和種）培養胚（試験卵）-Aランク　受胎×',5000,2,'頭'), R('R8/7/21','受精卵（褐毛和種）新鮮胚-Bランク　受胎○',15000,1,'頭'), R('R8/7/21','受精卵移植料',10000,1,'頭') ] }
+  ];
+  const has = no => (store.invoices||[]).some(x => x.invNo === no && /長島/.test(x.clientName||''));
+  store.trash = store.trash || [];
+  let n = 0;
+  lost.forEach(inv => { if(!has(inv.invNo)){ store.trash.unshift(inv); n++; } });
+  return true;
 }
 
 function groupByCategory(presets){
@@ -2065,6 +2130,7 @@ const ADDONS_V3_CLIENTS = [
 
 (async function init(){
   await loadStore();
+  try { if(syncReady && rebuildLostInvoicesOnce()) await persistStore(); } catch(e){ console.error(e); }
   if(!store.presets || store.presets.length === 0){
     store.presets = DEFAULT_PRESETS.map(p => ({...p}));
   }
