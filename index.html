@@ -1056,10 +1056,10 @@ function renderHistory(){
         <span>${escapeHtml(inv.subject||'')}</span>
         <span class="hi-amt">¥${yen(inv.total)}</span>
         <span>${escapeHtml(inv.invDate||'')}</span>
-        ${invOverCap(inv).length ? `<span style="font-size:11px;color:#b45309;font-weight:700;">⚠ 処理料が10個を超えています（${invOverCap(inv).map(it=>escapeHtml(String(it.name).split('（')[0])+' '+it.qty+'個').join('・')}）</span>` : ''}
+        ${invOverCap(inv).length ? `<span style="font-size:11px;color:#b45309;font-weight:700;">⚠ 処理料の11個目からが無料になっていません（${invOverCap(inv).map(it=>{ const m=String(it.name).match(CAP_NOTE_RE); return escapeHtml(String(it.name).split('（')[0])+' '+(m?m[1]:it.qty)+'個'; }).join('・')}）</span>` : ''}
       </div>
       <div class="hi-actions">
-        ${invOverCap(inv).length ? `<button type="button" onclick="fixInvCap('${inv.id}')" style="border-color:#b45309;color:#b45309;">10個までに直す</button>` : ''}
+        ${invOverCap(inv).length ? `<button type="button" onclick="fixInvCap('${inv.id}')" style="border-color:#b45309;color:#b45309;">11個目から無料に直す</button>` : ''}
         <button class="loadBtn" data-id="${inv.id}">開く</button>
         <button class="danger delBtn" data-id="${inv.id}">削除</button>
       </div>
@@ -1090,7 +1090,15 @@ function renderHistory(){
 }
 // 前に作った請求書で、胚凍結処理・新鮮胚処理が10個を超えて数えられている明細
 const CAP_ITEM_RE = /胚凍結処理|凍結処理|新鮮胚処理/;
-function invOverCap(inv){ return (inv.items||[]).filter(it => CAP_ITEM_RE.test(it.name||'') && Number(it.qty) > 10); }
+const CAP_NOTE_RE = /（(\d+)個のうち10個まで）/;
+const isCapDisc = it => /11個目から無料/.test(it.name||'');
+// 直す必要がある明細：10個を超えて値引きの行がないもの、または前の直し方（数量を10にした）のもの
+function invOverCap(inv){
+  const L = inv.items||[];
+  return L.filter((it, i) => CAP_ITEM_RE.test(it.name||'') && !isCapDisc(it) && (
+    CAP_NOTE_RE.test(it.name||'') ||
+    (Number(it.qty) > 10 && !(L[i+1] && isCapDisc(L[i+1])))));
+}
 function invTotal(items){
   let ex10=0, exFree=0;
   items.forEach(it=>{ const amt=(Number(it.qty)||0)*(Number(it.price)||0); if(it.taxCat==='free') exFree+=amt; else ex10+=amt; });
@@ -1100,13 +1108,16 @@ window.fixInvCap = async (id) => {
   const inv = (store.invoices||[]).find(x => x.id === id); if(!inv) return;
   const over = invOverCap(inv); if(!over.length) return;
   const before = inv.total;
-  const items = (inv.items||[]).map(it => {
-    if(!(CAP_ITEM_RE.test(it.name||'') && Number(it.qty) > 10)) return it;
-    const n = Number(it.qty);
-    return { ...it, qty: 10, name: /個まで）/.test(it.name) ? it.name : `${it.name}（${n}個のうち10個まで）` };
+  const items = [];
+  (inv.items||[]).forEach(it => {
+    if(!over.includes(it)){ items.push(it); return; }
+    const m = String(it.name).match(CAP_NOTE_RE);
+    const n = m ? Number(m[1]) : Number(it.qty);   // 前の直し方なら元の数に戻す
+    items.push({ ...it, qty: n, name: String(it.name).replace(CAP_NOTE_RE, '') });
+    if(n > 10) items.push({ date: it.date, name: capDiscName(String(it.name).replace(CAP_NOTE_RE, '')), unit: it.unit, qty: n - 10, price: -Math.abs(Number(it.price)||0), taxCat: it.taxCat || '10' });
   });
   const after = invTotal(items);
-  const ok = await showConfirmModal(`請求書 No.${inv.invNo}（${inv.clientName||''}）の処理料を10個までに直します。\n\n${over.map(it => `${String(it.name).split('（')[0]}：${it.qty}個 → 10個`).join('\n')}\n\n合計（税込）：¥${yen(before)} → ¥${yen(after)}\n\nもう相手に渡した請求書なら、直したものを渡し直すか、差額を次の請求で調整してください。`);
+  const ok = await showConfirmModal(`請求書 No.${inv.invNo}（${inv.clientName||''}）の処理料を、11個目から無料にします。処理した数はそのまま残して、「11個目から無料」の値引きの行を足します。\n\n${over.map(it => { const m = String(it.name).match(CAP_NOTE_RE); const n = m ? +m[1] : +it.qty; return `${String(it.name).split('（')[0]}：${n}個（うち${n - 10}個は無料）`; }).join('\n')}\n\n合計（税込）：¥${yen(before)} → ¥${yen(after)}\n\nもう相手に渡した請求書なら、直したものを渡し直すか、差額を次の請求で調整してください。`);
   if(!ok) return;
   inv.items = items; inv.total = after; inv.savedAt = new Date().toISOString();
   await persistStore();
@@ -1935,6 +1946,7 @@ function colBuild(){
 }
 // 胚凍結処理・新鮮胚処理は、それぞれ10個までしか取らない（11個目から0円）。凍結は最大2万円、新鮮は最大1万円
 const COL_PROC_CAP = 10;
+const capDiscName = nm => `${String(nm).split('（')[0]}　11個目から無料（10個まで）`;
 const colBill = n => Math.min(Number(n) || 0, COL_PROC_CAP);
 function colRowTotal(r){ return (r.on.sov ? colFee('sov').price : 0) + (r.on.flush ? colFee('flush').price : 0) + (r.on.frz ? colFee('frz').price * colBill(r.frz) : 0) + (r.on.fresh ? colFee('fresh').price * colBill(r.fresh) : 0); }
 function colRender(){
@@ -1966,9 +1978,10 @@ function colApply(){
     const add = (k, qty, extra) => { const f = colFee(k); items.push(blankItemRow(f.name + (extra || ''), f.unit, qty, f.price, f.taxCat, d)); };
     if(r.on.sov) add('sov', 1, who);
     if(r.on.flush) add('flush', 1, who + `（回収${r.rec}個）`);
-    const capNote = n => n > COL_PROC_CAP ? `（${n}個のうち${COL_PROC_CAP}個まで）` : '';
-    if(r.on.frz && r.frz) add('frz', colBill(r.frz), capNote(r.frz));
-    if(r.on.fresh && r.fresh) add('fresh', colBill(r.fresh), capNote(r.fresh));
+    // 処理した数はそのまま出して、11個目からは値引きの行で0円にする
+    const addCap = k => { const n = k === 'frz' ? r.frz : r.fresh; add(k, n); if(n > COL_PROC_CAP){ const f = colFee(k); items.push(blankItemRow(capDiscName(f.name), f.unit, n - COL_PROC_CAP, -f.price, f.taxCat, d)); } };
+    if(r.on.frz && r.frz) addCap('frz');
+    if(r.on.fresh && r.fresh) addCap('fresh');
   });
   for(let i = items.length - 1; i >= 0; i--){ const it = items[i]; if(!String(it.name || '').trim() && !Number(it.price)) items.splice(i, 1); }
   renderItems(); recalc();
