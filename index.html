@@ -1056,8 +1056,10 @@ function renderHistory(){
         <span>${escapeHtml(inv.subject||'')}</span>
         <span class="hi-amt">¥${yen(inv.total)}</span>
         <span>${escapeHtml(inv.invDate||'')}</span>
+        ${invOverCap(inv).length ? `<span style="font-size:11px;color:#b45309;font-weight:700;">⚠ 処理料が10個を超えています（${invOverCap(inv).map(it=>escapeHtml(String(it.name).split('（')[0])+' '+it.qty+'個').join('・')}）</span>` : ''}
       </div>
       <div class="hi-actions">
+        ${invOverCap(inv).length ? `<button type="button" onclick="fixInvCap('${inv.id}')" style="border-color:#b45309;color:#b45309;">10個までに直す</button>` : ''}
         <button class="loadBtn" data-id="${inv.id}">開く</button>
         <button class="danger delBtn" data-id="${inv.id}">削除</button>
       </div>
@@ -1086,6 +1088,32 @@ function renderHistory(){
   });
   renderTrash();
 }
+// 前に作った請求書で、胚凍結処理・新鮮胚処理が10個を超えて数えられている明細
+const CAP_ITEM_RE = /胚凍結処理|凍結処理|新鮮胚処理/;
+function invOverCap(inv){ return (inv.items||[]).filter(it => CAP_ITEM_RE.test(it.name||'') && Number(it.qty) > 10); }
+function invTotal(items){
+  let ex10=0, exFree=0;
+  items.forEach(it=>{ const amt=(Number(it.qty)||0)*(Number(it.price)||0); if(it.taxCat==='free') exFree+=amt; else ex10+=amt; });
+  return ex10 + exFree + Math.round(ex10*0.10);
+}
+window.fixInvCap = async (id) => {
+  const inv = (store.invoices||[]).find(x => x.id === id); if(!inv) return;
+  const over = invOverCap(inv); if(!over.length) return;
+  const before = inv.total;
+  const items = (inv.items||[]).map(it => {
+    if(!(CAP_ITEM_RE.test(it.name||'') && Number(it.qty) > 10)) return it;
+    const n = Number(it.qty);
+    return { ...it, qty: 10, name: /個まで）/.test(it.name) ? it.name : `${it.name}（${n}個のうち10個まで）` };
+  });
+  const after = invTotal(items);
+  const ok = await showConfirmModal(`請求書 No.${inv.invNo}（${inv.clientName||''}）の処理料を10個までに直します。\n\n${over.map(it => `${String(it.name).split('（')[0]}：${it.qty}個 → 10個`).join('\n')}\n\n合計（税込）：¥${yen(before)} → ¥${yen(after)}\n\nもう相手に渡した請求書なら、直したものを渡し直すか、差額を次の請求で調整してください。`);
+  if(!ok) return;
+  inv.items = items; inv.total = after; inv.savedAt = new Date().toISOString();
+  await persistStore();
+  if(currentId === inv.id) loadInvoiceIntoForm(inv);
+  renderHistory();
+  showToast(`No.${inv.invNo} を ¥${yen(after)} に直しました`);
+};
 function renderTrash(){
   const box = document.getElementById('trashBox'); if(!box) return;
   const lim = Date.now() - 60*24*3600*1000;
