@@ -1905,7 +1905,10 @@ function colBuild(){
   colImp.sel = first >= 0 ? first : 0;
   colRender();
 }
-function colRowTotal(r){ return (r.on.sov ? colFee('sov').price : 0) + (r.on.flush ? colFee('flush').price : 0) + (r.on.frz ? colFee('frz').price * r.frz : 0) + (r.on.fresh ? colFee('fresh').price * r.fresh : 0); }
+// 胚凍結処理・新鮮胚処理は、それぞれ10個までしか取らない（11個目から0円）。凍結は最大2万円、新鮮は最大1万円
+const COL_PROC_CAP = 10;
+const colBill = n => Math.min(Number(n) || 0, COL_PROC_CAP);
+function colRowTotal(r){ return (r.on.sov ? colFee('sov').price : 0) + (r.on.flush ? colFee('flush').price : 0) + (r.on.frz ? colFee('frz').price * colBill(r.frz) : 0) + (r.on.fresh ? colFee('fresh').price * colBill(r.fresh) : 0); }
 function colRender(){
   const box = document.getElementById('colRows');
   if(!colImp.rows.length){ box.innerHTML = '<div class="tb-note">この期間の採卵記録はありません。</div>'; colSummary(); return; }
@@ -1913,7 +1916,7 @@ function colRender(){
   const num = (i, k) => `<input type="number" min="0" value="${colImp.rows[i][k]}" onchange="colSetN(${i},'${k}',this.value)" style="width:52px;border:1px solid var(--line);border-radius:6px;padding:3px;font-size:12px;">`;
   box.innerHTML = colImp.rows.map((r, i) => { const on = i === colImp.sel; return `<div class="tb-row" style="cursor:pointer;${on ? 'border:2px solid var(--accent,#2e9e63);background:rgba(46,158,99,.08);' : 'opacity:.75;'}" onclick="colPick(${i})">
       <div class="tb-head"><span>${on ? '◉' : '○'} ${toWareki(r.date)}</span><span><b>${escapeHtml(r.donor || '—')}</b>${r.sire ? ' × ' + escapeHtml(r.sire) : ''}</span><span class="tb-price">${r.billed ? '<span style="font-size:11px;color:#b45309;font-weight:700;">請求済み</span> ' : ''}${on ? '¥' + yen(colRowTotal(r)) : ''}</span></div>
-      <div class="tb-sub">回収 ${r.rec}個　凍結 ${r.frz}個　新鮮 ${r.fresh}個${r.c.lot ? '　ロット ' + escapeHtml(r.c.lot) : ''}</div>
+      <div class="tb-sub">回収 ${r.rec}個　凍結 ${r.frz}個　新鮮 ${r.fresh}個${(r.frz > COL_PROC_CAP || r.fresh > COL_PROC_CAP) ? `　<span style="color:#b45309;">※処理料は${COL_PROC_CAP}個まで</span>` : ''}${r.c.lot ? '　ロット ' + escapeHtml(r.c.lot) : ''}</div>
       ${on ? `<div class="tb-ctl" onclick="event.stopPropagation()">${ck(i, 'sov', '過剰排卵処置')}${ck(i, 'flush', '回収・検卵')}${ck(i, 'frz', '凍結')}${num(i, 'frz')}個 ${ck(i, 'fresh', '新鮮')}${num(i, 'fresh')}個</div>` : ''}
     </div>`; }).join('');
   colSummary();
@@ -1935,8 +1938,9 @@ function colApply(){
     const add = (k, qty, extra) => { const f = colFee(k); items.push(blankItemRow(f.name + (extra || ''), f.unit, qty, f.price, f.taxCat, d)); };
     if(r.on.sov) add('sov', 1, who);
     if(r.on.flush) add('flush', 1, who + `（回収${r.rec}個）`);
-    if(r.on.frz && r.frz) add('frz', r.frz);
-    if(r.on.fresh && r.fresh) add('fresh', r.fresh);
+    const capNote = n => n > COL_PROC_CAP ? `（${n}個のうち${COL_PROC_CAP}個まで）` : '';
+    if(r.on.frz && r.frz) add('frz', colBill(r.frz), capNote(r.frz));
+    if(r.on.fresh && r.fresh) add('fresh', colBill(r.fresh), capNote(r.fresh));
   });
   for(let i = items.length - 1; i >= 0; i--){ const it = items[i]; if(!String(it.name || '').trim() && !Number(it.price)) items.splice(i, 1); }
   renderItems(); recalc();
@@ -2279,7 +2283,7 @@ window.addEventListener('beforeprint', () => {
     <div class="tb-filter">
       <label>依頼元<select id="colFarm"></select></label>
     </div>
-    <div class="tb-note">請求する採卵を<b>1回</b>選んでください（請求書は採卵1回ごとに1枚）。選んだ採卵の<b>過剰排卵処置・回収検卵作業・胚凍結処理・新鮮胚処理</b>を入れます。凍結と新鮮の個数は記録から入ります（培養胚は、凍結したものを凍結、移植したものを新鮮に数えます。廃棄は数えません）。請求しないものはチェックを外してください。金額はプリセットの値段です。</div>
+    <div class="tb-note">請求する採卵を<b>1回</b>選んでください（請求書は採卵1回ごとに1枚）。選んだ採卵の<b>過剰排卵処置・回収検卵作業・胚凍結処理・新鮮胚処理</b>を入れます。凍結と新鮮の個数は記録から入ります（処理料は凍結・新鮮それぞれ<b>10個まで</b>。11個目からは0円）（培養胚は、凍結したものを凍結、移植したものを新鮮に数えます。廃棄は数えません）。請求しないものはチェックを外してください。金額はプリセットの値段です。</div>
     <div id="colRows" class="tb-rows"></div>
     <div class="msg" id="colMsg"></div>
     <div class="acts"><button type="button" id="colCancel">やめる</button><button type="button" class="primary" id="colOk">明細に追加</button></div>
